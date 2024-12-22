@@ -2,7 +2,17 @@ require("dotenv").config();
 const { chromium } = require("playwright");
 const fs = require("fs");
 
-const DOWNLOADED_ORDERS_PATH = "downloaded-orders.json";
+const ORDER_DATA_PATH = "order-data.json";
+const MOCK = process.argv.includes("--mock");
+console.log("Mock mode:", MOCK);
+
+const BASE_CTX = {
+  userAgent:
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
+  javaScriptEnabled: true,
+  timezoneId: "America/New_York",
+  geolocation: { latitude: 40.0794, longitude: -76.3141 },
+};
 
 const wait = async (min = 1000, max = 3000) => {
   const delay = Math.floor(Math.random() * (max - min + 1)) + min;
@@ -84,8 +94,8 @@ const getRecentOrderIds = async (page) => {
 };
 
 const loadDownloadedOrders = () => {
-  if (fs.existsSync(DOWNLOADED_ORDERS_PATH)) {
-    return JSON.parse(fs.readFileSync(DOWNLOADED_ORDERS_PATH, "utf8"));
+  if (fs.existsSync(ORDER_DATA_PATH)) {
+    return JSON.parse(fs.readFileSync(ORDER_DATA_PATH, "utf8"));
   }
   return [];
 };
@@ -95,54 +105,169 @@ const saveDownloadedOrder = (orderId) => {
   if (!downloadedOrders.includes(orderId)) {
     downloadedOrders.push(orderId);
     fs.writeFileSync(
-      DOWNLOADED_ORDERS_PATH,
+      ORDER_DATA_PATH,
       JSON.stringify(downloadedOrders, null, 2)
     );
   }
 };
 
-const downloadInvoice = async (page, orderId) => {
+const extractDataFromInvoice = async (page, orderId) => {
   try {
-    // Create downloads directory if it doesn't exist
-    const downloadsDir = "./downloads";
-    if (!fs.existsSync(downloadsDir)) {
-      fs.mkdirSync(downloadsDir);
+    // Navigate to invoice page with random delay
+    if (!MOCK) {
+      await wait(2000, 4000);
+      const invoiceUrl = `https://www.amazon.com/gp/css/summary/print.html?orderID=${orderId}`;
+      await page.goto(invoiceUrl);
+      await wait(1000, 2000);
     }
 
-    // Navigate to invoice page with random delay
-    await wait(2000, 4000);
-    const invoiceUrl = `https://www.amazon.com/gp/css/summary/print.html?orderID=${orderId}`;
-    await page.goto(invoiceUrl);
+    // Extract order details
+    const orderData = await page.evaluate(() => {
+      const getDollarAmount = (text) => {
+        return parseFloat(text.split("$").pop().trim());
+      };
 
-    // Wait for the page to load
-    await wait(1000, 2000);
+      // Get order date - find text content that includes "Order Placed:"
+      let orderDate = null;
+      const elements = document.querySelectorAll("b");
+      for (const el of elements) {
+        if (el.textContent.includes("Order Placed:")) {
+          orderDate = el.parentElement?.textContent
+            .split("Order Placed:")
+            .pop()
+            .trim();
+          break;
+        }
+      }
 
-    // Set up PDF options
-    const pdfOptions = {
-      path: `${downloadsDir}/${orderId}_invoice.pdf`,
-      format: "A4",
-      printBackground: true,
-      margin: {
-        top: "20px",
-        bottom: "20px",
-        left: "20px",
-        right: "20px",
-      },
+      // Get all items
+      const spans = Array.from(document.querySelectorAll("span"));
+
+      const items = spans
+        .filter((s) => s.textContent.includes("Sold by:"))
+        .map((s) => {
+          const td = s.parentElement;
+          const name = td
+            .querySelector("i")
+            ?.textContent.trim()
+            .replace(/\s+/g, " ");
+          const price = td.nextElementSibling?.textContent.trim();
+          return { name, price: getDollarAmount(price) };
+        })
+        .filter((i) => i.name);
+
+      // Get credit card transactions
+      const bElements = Array.from(document.querySelectorAll("b"));
+
+      const transactions = bElements
+        .filter((b) => b.textContent.includes("Credit Card transactions"))
+        .map((b) => {
+          let e = b;
+          while (e.tagName !== "TR") {
+            e = e.parentElement;
+          }
+          return e;
+        })
+        .map((tr) => {
+          const tds = Array.from(tr.querySelectorAll("td")).filter((td) => {
+            return td.childNodes.length === 1;
+          });
+
+          let amount = null,
+            type = null,
+            last4 = null;
+
+          // Get price, type, and last4 from the tds with only one child node
+          for (const td of tds) {
+            const text = td.textContent.trim();
+            if (text.includes("ending in")) {
+              last4 = text.split("ending in").pop().trim();
+              last4 = last4.split(":").shift().trim();
+              type = text.split("ending in").shift().trim();
+            }
+            if (text.includes("$")) {
+              amount = getDollarAmount(text);
+            }
+          }
+          return { type, last4, amount };
+        });
+
+      // If no transactions found, try to get grand total
+      let total = null;
+      if (transactions.length === 0) {
+        const grandTotal = bElements
+          .filter((b) => b.textContent.includes("Grand Total:"))
+          .map((b) => {
+            let e = b;
+            while (e.tagName !== "TR") {
+              e = e.parentElement;
+            }
+            return e;
+          })
+          .map((tr) => {
+            let amount = null;
+            Array.from(tr.querySelectorAll("td")).forEach((td) => {
+              const text = td.textContent.trim();
+              if (text.includes("$")) {
+                amount = getDollarAmount(text);
+              }
+            });
+            return { amount };
+          });
+
+        // note: will be only one grand total
+        total = grandTotal.reduce((sum, t) => sum + t.amount, 0);
+      } else {
+        // Sum all transaction amounts
+        total = transactions.reduce((sum, t) => sum + t.amount, 0);
+      }
+
+      return {
+        orderDate,
+        items,
+        total: total || 0,
+        transactions,
+      };
+    });
+
+    // Return combined data
+    return {
+      orderId,
+      ...orderData,
     };
-
-    // Generate PDF from the page
-    await page.pdf(pdfOptions);
-    await wait(1000, 3000); // Wait between downloads
-
-    console.log(`Downloaded invoice for order ${orderId}`);
-    return true;
   } catch (error) {
     console.error(
-      `Failed to download invoice for order ${orderId}:`,
+      `Failed to extract data for order ${orderId}:`,
       error.message
     );
-    return false;
+    return null;
   }
+};
+
+const saveOrderData = (orderData) => {
+  const filePath = ORDER_DATA_PATH;
+  let existingData = [];
+
+  if (fs.existsSync(filePath)) {
+    existingData = JSON.parse(fs.readFileSync(filePath, "utf8"));
+  }
+
+  // Check if order already exists
+  const orderIndex = existingData.findIndex(
+    (order) => order.orderId === orderData.orderId
+  );
+
+  if (orderIndex === -1) {
+    // Add new order
+    existingData.push(orderData);
+  } else {
+    // Update existing order
+    existingData[orderIndex] = orderData;
+  }
+
+  // Save to file
+  fs.writeFileSync(filePath, JSON.stringify(existingData, null, 2));
+  console.log(`Saved data for order ${orderData.orderId}`);
 };
 
 const handlePasswordReconfirmation = async (page) => {
@@ -174,17 +299,8 @@ const handlePasswordReconfirmation = async (page) => {
   }
 };
 
-const main = async () => {
+const goToOrdersPage = async (browser) => {
   const storageStatePath = "state.json";
-  const browser = await chromium.launch({ headless: false });
-
-  const baseContext = {
-    userAgent:
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
-    javaScriptEnabled: true,
-    timezoneId: "America/New_York",
-    geolocation: { latitude: 40.0794, longitude: -76.3141 },
-  };
 
   let context;
   let page;
@@ -195,7 +311,7 @@ const main = async () => {
     console.log("Found existing session state, testing if still valid...");
     try {
       context = await browser.newContext({
-        ...baseContext,
+        ...BASE_CTX,
         storageState: storageStatePath,
       });
 
@@ -217,7 +333,7 @@ const main = async () => {
 
   if (needsLogin) {
     console.log("Creating new session...");
-    context = await browser.newContext(baseContext);
+    context = await browser.newContext(BASE_CTX);
     page = await context.newPage();
 
     const loginSuccess = await login(page);
@@ -235,25 +351,40 @@ const main = async () => {
   await wait(3000, 5000);
   await handlePasswordReconfirmation(page);
 
-  // Get recent order IDs
-  const recentOrderIds = await getRecentOrderIds(page);
-  console.log(`Found ${recentOrderIds.length} recent orders`);
+  return { context, page };
+};
 
-  // Load previously downloaded orders
-  const downloadedOrders = loadDownloadedOrders();
+const goToMockPage = async (browser) => {
+  const context = await browser.newContext(BASE_CTX);
+  const page = await context.newPage();
 
-  // Download new invoices
-  for (const orderId of recentOrderIds) {
-    if (!downloadedOrders.includes(orderId)) {
-      console.log(`Downloading invoice for order ${orderId}...`);
-      const success = await downloadInvoice(page, orderId);
-      if (success) {
-        saveDownloadedOrder(orderId);
-      }
-    } else {
-      console.log(
-        `Invoice for order ${orderId} already downloaded, skipping...`
-      );
+  // Navigate to orders page
+  console.log("Navigating to mock page...");
+  await page.goto("http://localhost:4200");
+
+  return { context, page };
+};
+
+const main = async () => {
+  const browser = await chromium.launch({ headless: false });
+
+  if (MOCK) {
+    const { page } = await goToMockPage(browser);
+    const orderData = await extractDataFromInvoice(page, "113-7450326-7014652");
+    console.log(orderData);
+    if (orderData) saveOrderData(orderData);
+  } else {
+    const { page } = await goToOrdersPage(browser);
+
+    // Get recent order IDs
+    const recentOrderIds = await getRecentOrderIds(page);
+    console.log(`Found ${recentOrderIds.length} recent orders`);
+
+    // Download order data
+    for (const orderId of recentOrderIds) {
+      console.log(`Extracting data for order ${orderId}...`);
+      const orderData = await extractDataFromInvoice(page, orderId);
+      if (orderData) saveOrderData(orderData);
     }
   }
 

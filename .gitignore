@@ -52,4 +52,4 @@ dist
 
 state.json
 downloads/
-downloaded-orders.json
+order-data.json
