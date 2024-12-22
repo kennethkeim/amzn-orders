@@ -54,12 +54,22 @@ const getRecentOrderIds = async (page) => {
 
   const orders = await page.$$eval(".order-card", (cards) => {
     return cards.slice(0, 2).map((card) => {
-      const orderId = card.getAttribute("data-order-id");
+      // Find the order ID element within the card
+      const orderIdElement = card.querySelector(
+        '.yohtmlc-order-id span[dir="ltr"]'
+      );
+      if (!orderIdElement) return null;
+
+      // Get the order ID text and clean it up
+      const orderId = orderIdElement.textContent.trim();
       return orderId;
     });
   });
 
-  return orders.filter((id) => id); // Remove any null/undefined values
+  // Filter out any null values and log the found orders
+  const validOrders = orders.filter((id) => id);
+  console.log("Found order IDs:", validOrders);
+  return validOrders;
 };
 
 const loadDownloadedOrders = () => {
@@ -89,7 +99,7 @@ const downloadInvoice = async (page, orderId) => {
     }
 
     // Navigate to invoice page
-    const invoiceUrl = `https://www.amazon.com/gp/invoice/download.html?orderId=${orderId}`;
+    const invoiceUrl = `https://www.amazon.com/gp/css/summary/print.html?orderID=${orderId}`;
     const downloadPromise = page.waitForEvent("download");
     await page.goto(invoiceUrl);
 
