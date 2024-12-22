@@ -4,6 +4,12 @@ const fs = require("fs");
 
 const DOWNLOADED_ORDERS_PATH = "downloaded-orders.json";
 
+const wait = async (min = 1000, max = 3000) => {
+  const delay = Math.floor(Math.random() * (max - min + 1)) + min;
+  await new Promise((resolve) => setTimeout(resolve, delay));
+  console.log(`Waited for ${delay}ms`);
+};
+
 const isLoggedIn = async (page) => {
   try {
     // Try to find an element that's only visible when logged in
@@ -24,10 +30,15 @@ const login = async (page) => {
   console.log("Logging in...");
   try {
     await page.goto("https://www.amazon.com/");
+    await wait(3000, 5000);
     await page.click("#nav-link-accountList");
+    await wait(1000, 2000);
     await page.fill("#ap_email", process.env.EMAIL);
+    await wait(800, 1500);
     await page.click("#continue");
+    await wait(1000, 2000);
     await page.fill("#ap_password", process.env.PASS);
+    await wait(700, 1900);
     await page.click("#signInSubmit");
 
     // Wait for login to complete and verify
@@ -98,12 +109,13 @@ const downloadInvoice = async (page, orderId) => {
       fs.mkdirSync(downloadsDir);
     }
 
-    // Navigate to invoice page
+    // Navigate to invoice page with random delay
+    await wait(2000, 4000);
     const invoiceUrl = `https://www.amazon.com/gp/css/summary/print.html?orderID=${orderId}`;
     await page.goto(invoiceUrl);
 
     // Wait for the page to load
-    await page.waitForLoadState("networkidle");
+    await wait(1000, 2000);
 
     // Set up PDF options
     const pdfOptions = {
@@ -120,6 +132,7 @@ const downloadInvoice = async (page, orderId) => {
 
     // Generate PDF from the page
     await page.pdf(pdfOptions);
+    await wait(1000, 3000); // Wait between downloads
 
     console.log(`Downloaded invoice for order ${orderId}`);
     return true;
@@ -134,17 +147,19 @@ const downloadInvoice = async (page, orderId) => {
 
 const handlePasswordReconfirmation = async (page) => {
   try {
-    // Check if password reconfirmation is needed (wait for password field)
     const passwordField = await page.waitForSelector("#ap_password", {
       timeout: 3000,
     });
     if (passwordField) {
       console.log("Password reconfirmation required...");
+      await wait(1000, 2000);
       await page.fill("#ap_password", process.env.PASS);
+      await wait(500, 1000);
 
       try {
         await page.check('input[name="rememberMe"]', { timeout: 5000 });
         console.log("Checked 'Keep me signed in' box");
+        await wait(500, 1000);
       } catch (error) {
         console.log("No 'Keep me signed in' checkbox found:", error.message);
       }
@@ -217,6 +232,7 @@ const main = async () => {
   // Navigate to orders page
   console.log("Navigating to orders page...");
   await page.goto("https://www.amazon.com/gp/your-account/order-history");
+  await wait(3000, 5000);
   await handlePasswordReconfirmation(page);
 
   // Get recent order IDs
