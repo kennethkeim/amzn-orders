@@ -49,3 +49,5 @@ yarn-error.log*
 dist
 **/node_modules
 **/.cache/
+
+state.json

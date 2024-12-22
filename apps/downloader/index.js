@@ -1,50 +1,64 @@
+require("dotenv").config();
 const { chromium } = require("playwright");
+const fs = require("fs");
 
-(async () => {
-  const browser = await chromium.launch({ headless: false }); // Set headless to true for silent execution
-  const context = await browser.newContext({
-    // Persist cookies and sessions if needed
-    storageState: "state.json",
-  });
-  const page = await context.newPage();
+const main = async () => {
+  // Check if the storage state file exists
+  const storageStatePath = "state.json";
+  const browser = await chromium.launch({ headless: false }); // Open browser in non-headless mode
+  let context;
 
-  // Navigate to Amazon
-  console.log("Navigating to Amazon...");
-  await page.goto("https://www.amazon.com/");
+  const baseContext = {
+    userAgent:
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
+    javaScriptEnabled: true,
+    timezoneId: "America/New_York",
+    geolocation: { latitude: 40.0794, longitude: -76.3141 },
+  };
 
-  // Log in to your account
-  console.log("Logging in...");
-  await page.click("#nav-link-accountList"); // Click on "Sign In"
-  await page.fill("#ap_email", "YOUR_EMAIL"); // Replace with your Amazon email
-  await page.click("#continue");
-  await page.fill("#ap_password", "YOUR_PASSWORD"); // Replace with your Amazon password
-  await page.click("#signInSubmit");
+  if (fs.existsSync(storageStatePath)) {
+    // Use the existing session state
+    console.log("Using existing session state...");
+    context = await browser.newContext({
+      ...baseContext,
+      storageState: storageStatePath,
+    });
+  } else {
+    // Create a new context and log in
+    console.log("No existing session state. Logging in...");
+    context = await browser.newContext({
+      ...baseContext,
+    });
 
-  // Navigate to orders page
-  console.log("Navigating to orders...");
-  await page.goto("https://www.amazon.com/gp/your-account/order-history");
+    const page = await context.newPage({
+      viewport: { width: 1920, height: 1080 },
+    });
 
-  // Loop through orders and download invoices
-  console.log("Downloading invoices...");
-  const orders = await page.$$(".order"); // Adjust selector based on the page's structure
-  for (let i = 0; i < orders.length; i++) {
-    try {
-      const order = orders[i];
-      await order.click(".a-button-text"); // Click "Invoice"
-      await page.waitForSelector(".download-invoice"); // Wait for invoice download button
-      const [download] = await Promise.all([
-        page.waitForEvent("download"), // Wait for the download to start
-        page.click(".download-invoice"), // Trigger the download
-      ]);
-      const path = await download.path();
-      console.log(`Invoice downloaded: ${path}`);
-    } catch (err) {
-      console.error(
-        `Failed to download invoice for order ${i + 1}: ${err.message}`
-      );
-    }
+    // Navigate to Amazon login page
+    console.log("Navigating to Amazon...");
+    await page.goto("https://www.amazon.com/");
+
+    // Log in
+    console.log("Logging in...");
+    await page.click("#nav-link-accountList"); // Click on "Sign In"
+    await page.fill("#ap_email", process.env.EMAIL);
+    await page.click("#continue");
+    await page.fill("#ap_password", process.env.PASS);
+    await page.click("#signInSubmit");
+
+    // Optionally wait to confirm login succeeded
+    console.log("Verifying login...");
+    await page.waitForSelector("#nav-orders", { timeout: 15000 });
+
+    // Save the session state to state.json
+    console.log("Saving session state...");
+    await context.storageState({ path: storageStatePath });
   }
 
-  // Close the browser
-  await browser.close();
-})();
+  // Proceed with your actions (e.g., navigate to orders page)
+  const page = await context.newPage();
+  console.log("Navigating to orders page...");
+  await page.goto("https://www.amazon.com/gp/your-account/order-history");
+};
+
+main().catch(console.error);
