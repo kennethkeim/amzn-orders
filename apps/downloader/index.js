@@ -145,8 +145,10 @@ const main = async () => {
   };
 
   let context;
+  let page;
   let needsLogin = true;
 
+  // Create context and single page that we'll reuse
   if (fs.existsSync(storageStatePath)) {
     console.log("Found existing session state, testing if still valid...");
     try {
@@ -155,27 +157,26 @@ const main = async () => {
         storageState: storageStatePath,
       });
 
-      const testPage = await context.newPage();
-      await testPage.goto("https://www.amazon.com/");
-
-      if (await isLoggedIn(testPage)) {
-        console.log("Existing session is valid");
-        needsLogin = false;
-      } else {
-        console.log("Existing session expired");
-        await context.close();
-      }
-      await testPage.close();
+      page = await context.newPage();
+      await page.goto("https://www.amazon.com/");
     } catch (error) {
       console.log("Error testing existing session:", error.message);
       if (context) await context.close();
+    }
+
+    if (await isLoggedIn(page)) {
+      console.log("Existing session is valid");
+      needsLogin = false;
+    } else {
+      console.log("Existing session expired");
+      await context.close();
     }
   }
 
   if (needsLogin) {
     console.log("Creating new session...");
     context = await browser.newContext(baseContext);
-    const page = await context.newPage();
+    page = await context.newPage();
 
     const loginSuccess = await login(page);
     if (!loginSuccess) {
@@ -184,11 +185,9 @@ const main = async () => {
 
     console.log("Saving new session state...");
     await context.storageState({ path: storageStatePath });
-    await page.close();
   }
 
-  // Proceed with your actions (e.g., navigate to orders page)
-  const page = await context.newPage();
+  // Navigate to orders page
   console.log("Navigating to orders page...");
   await page.goto("https://www.amazon.com/gp/your-account/order-history");
 
