@@ -132,6 +132,33 @@ const downloadInvoice = async (page, orderId) => {
   }
 };
 
+const handlePasswordReconfirmation = async (page) => {
+  try {
+    // Check if password reconfirmation is needed (wait for password field)
+    const passwordField = await page.waitForSelector("#ap_password", {
+      timeout: 3000,
+    });
+    if (passwordField) {
+      console.log("Password reconfirmation required...");
+      await page.fill("#ap_password", process.env.PASS);
+
+      try {
+        await page.check('input[name="rememberMe"]', { timeout: 5000 });
+        console.log("Checked 'Keep me signed in' box");
+      } catch (error) {
+        console.log("No 'Keep me signed in' checkbox found:", error.message);
+      }
+
+      await page.click("#signInSubmit");
+      await page.waitForLoadState("networkidle");
+      return true;
+    }
+  } catch (error) {
+    // No password reconfirmation needed
+    return false;
+  }
+};
+
 const main = async () => {
   const storageStatePath = "state.json";
   const browser = await chromium.launch({ headless: false });
@@ -190,6 +217,7 @@ const main = async () => {
   // Navigate to orders page
   console.log("Navigating to orders page...");
   await page.goto("https://www.amazon.com/gp/your-account/order-history");
+  await handlePasswordReconfirmation(page);
 
   // Get recent order IDs
   const recentOrderIds = await getRecentOrderIds(page);
