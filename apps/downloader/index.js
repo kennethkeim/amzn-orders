@@ -100,12 +100,26 @@ const downloadInvoice = async (page, orderId) => {
 
     // Navigate to invoice page
     const invoiceUrl = `https://www.amazon.com/gp/css/summary/print.html?orderID=${orderId}`;
-    const downloadPromise = page.waitForEvent("download");
     await page.goto(invoiceUrl);
 
-    const download = await downloadPromise;
-    const filePath = `${downloadsDir}/${orderId}_invoice.pdf`;
-    await download.saveAs(filePath);
+    // Wait for the page to load
+    await page.waitForLoadState("networkidle");
+
+    // Set up PDF options
+    const pdfOptions = {
+      path: `${downloadsDir}/${orderId}_invoice.pdf`,
+      format: "A4",
+      printBackground: true,
+      margin: {
+        top: "20px",
+        bottom: "20px",
+        left: "20px",
+        right: "20px",
+      },
+    };
+
+    // Generate PDF from the page
+    await page.pdf(pdfOptions);
 
     console.log(`Downloaded invoice for order ${orderId}`);
     return true;
