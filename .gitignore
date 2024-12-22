@@ -51,3 +51,5 @@ dist
 **/.cache/
 
 state.json
+downloads/
+downloaded-orders.json
