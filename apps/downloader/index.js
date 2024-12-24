@@ -74,7 +74,7 @@ const getRecentOrderIds = async (page) => {
   await page.waitForSelector(".order-card");
 
   const orders = await page.$$eval(".order-card", (cards) => {
-    return cards.slice(0, 2).map((card) => {
+    return cards.slice(0, 10).map((card) => {
       // Find the order ID element within the card
       const orderIdElement = card.querySelector(
         '.yohtmlc-order-id span[dir="ltr"]'
