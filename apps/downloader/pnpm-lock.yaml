@@ -14,6 +14,10 @@ importers:
       playwright:
         specifier: ^1.49.1
         version: 1.49.1
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.7.2
 
 packages:
 
@@ -36,6 +40,11 @@ packages:
     engines: {node: '>=18'}
     hasBin: true
 
+  typescript@5.7.2:
+    resolution: {integrity: sha512-i5t66RHxDvVN40HfDd1PsEThGNnlMCMT3jMUuoh9/0TaqWevNontacunWyN02LA9/fIbEWlcHZcgTKb9QoaLfg==}
+    engines: {node: '>=14.17'}
+    hasBin: true
+
 snapshots:
 
   dotenv@16.4.7: {}
@@ -50,3 +59,5 @@ snapshots:
       playwright-core: 1.49.1
     optionalDependencies:
       fsevents: 2.3.2
+
+  typescript@5.7.2: {}
