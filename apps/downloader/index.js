@@ -244,20 +244,34 @@ const extractDataFromInvoice = async (page, orderId) => {
   }
 };
 
-const saveOrderData = (orderData) => {
-  const filePath = ORDER_DATA_PATH;
+const loadOrderData = () => {
   let existingData = [];
 
-  if (fs.existsSync(filePath)) {
-    existingData = JSON.parse(fs.readFileSync(filePath, "utf8"));
+  if (fs.existsSync(ORDER_DATA_PATH)) {
+    existingData = JSON.parse(fs.readFileSync(ORDER_DATA_PATH, "utf8"));
   }
 
+  return existingData;
+};
+
+const saveToFile = (orderData) => {
+  fs.writeFileSync(ORDER_DATA_PATH, JSON.stringify(orderData, null, 2));
+};
+
+const checkIfOrderExists = (orderData) => {
   // Check if order already exists
-  const orderIndex = existingData.findIndex(
+  const orderIndex = orderData.findIndex(
     (order) => order.orderId === orderData.orderId
   );
 
-  if (orderIndex === -1) {
+  return orderIndex !== -1;
+};
+
+const saveOrderData = (orderData) => {
+  let existingData = loadOrderData();
+  const orderExists = checkIfOrderExists(orderData);
+
+  if (!orderExists) {
     // Add new order
     existingData.push(orderData);
   } else {
@@ -266,7 +280,7 @@ const saveOrderData = (orderData) => {
   }
 
   // Save to file
-  fs.writeFileSync(filePath, JSON.stringify(existingData, null, 2));
+  saveToFile(existingData);
   console.log(`Saved data for order ${orderData.orderId}`);
 };
 
