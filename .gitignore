@@ -50,3 +50,4 @@ dist/
 state.json
 downloads/
 order-data.json
+user-data-dir

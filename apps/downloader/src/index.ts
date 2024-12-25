@@ -1,11 +1,10 @@
-import { chromium, Page, BrowserContext, Browser } from "playwright";
+import { chromium, Page, BrowserContext } from "playwright";
 import { config } from "dotenv";
 import fs from "fs";
 import path from "path";
 import {
   BaseContext,
   OrderData,
-  PageAndContext,
   Transaction,
   OrderItem,
   EvaluateResult,
@@ -15,7 +14,7 @@ config();
 
 const APP_DIR = path.join(__dirname);
 const ORDER_DATA_PATH = path.join(APP_DIR, "order-data.json");
-const STATE_PATH = path.join(APP_DIR, "state.json");
+const USER_DATA_DIR = path.join(APP_DIR, "user-data-dir");
 
 const MOCK = process.argv.includes("--mock");
 console.log("Mock mode:", MOCK);
@@ -331,55 +330,32 @@ const handlePasswordReconfirmation = async (page: Page): Promise<boolean> => {
   }
 };
 
-const goToOrdersPage = async (browser: Browser): Promise<PageAndContext> => {
-  let context: BrowserContext | undefined;
-  let page: Page | undefined;
+const goToOrdersPage = async (context: BrowserContext): Promise<Page> => {
+  const page = await context.newPage();
   let needsLogin = true;
 
-  // Create context and single page that we'll reuse
-  if (fs.existsSync(STATE_PATH)) {
-    console.log("Found existing session state, testing if still valid...");
-    try {
-      context = await browser.newContext({
-        ...BASE_CTX,
-        storageState: STATE_PATH,
-      });
+  try {
+    await page.goto("https://www.amazon.com/");
 
-      page = await context.newPage();
-      await page.goto("https://www.amazon.com/");
-    } catch (error) {
-      console.log(
-        "Error testing existing session:",
-        error instanceof Error ? error.message : String(error)
-      );
-      if (context) await context.close();
-    }
-
-    if (page && (await isLoggedIn(page))) {
+    if (await isLoggedIn(page)) {
       console.log("Existing session is valid");
       needsLogin = false;
     } else {
-      console.log("Existing session expired");
-      if (context) await context.close();
+      console.log("No valid session found");
     }
+  } catch (error) {
+    console.log(
+      "Error checking login:",
+      error instanceof Error ? error.message : String(error)
+    );
   }
 
   if (needsLogin) {
-    console.log("Creating new session...");
-    context = await browser.newContext(BASE_CTX);
-    page = await context.newPage();
-
+    console.log("Logging in to new session...");
     const loginSuccess = await login(page);
     if (!loginSuccess) {
       throw new Error("Unable to log in to Amazon");
     }
-
-    console.log("Saving new session state...");
-    await context.storageState({ path: STATE_PATH });
-  }
-
-  if (!context || !page) {
-    throw new Error("Failed to create context or page");
   }
 
   // Navigate to orders page
@@ -388,26 +364,28 @@ const goToOrdersPage = async (browser: Browser): Promise<PageAndContext> => {
   await wait(3000, 5000);
   await handlePasswordReconfirmation(page);
 
-  return { context, page };
+  return page;
 };
 
-const goToMockPage = async (browser: Browser): Promise<PageAndContext> => {
-  const context = await browser.newContext(BASE_CTX);
+const goToMockPage = async (context: BrowserContext): Promise<Page> => {
   const page = await context.newPage();
 
   // Navigate to orders page
   console.log("Navigating to mock page...");
   await page.goto("http://localhost:4200");
 
-  return { context, page };
+  return page;
 };
 
 const main = async (): Promise<void> => {
-  const browser = await chromium.launch({ headless: false });
+  const context = await chromium.launchPersistentContext(USER_DATA_DIR, {
+    headless: false,
+    ...BASE_CTX,
+  });
 
   try {
     if (MOCK) {
-      const { page } = await goToMockPage(browser);
+      const page = await goToMockPage(context);
       const orderData = await extractDataFromInvoice(
         page,
         "113-7450326-7014652"
@@ -416,7 +394,7 @@ const main = async (): Promise<void> => {
       if (orderData) saveOrderData(orderData);
     } else {
       const existingData = loadOrderData();
-      const { page } = await goToOrdersPage(browser);
+      const page = await goToOrdersPage(context);
 
       // Get recent order IDs
       const recentOrderIds = await getRecentOrderIds(page);
@@ -435,7 +413,7 @@ const main = async (): Promise<void> => {
       }
     }
   } finally {
-    await browser.close();
+    await context.close();
   }
 };
 

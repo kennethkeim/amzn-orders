@@ -30,8 +30,3 @@ export interface OrderData {
 }
 
 export type EvaluateResult = Omit<OrderData, "orderId">;
-
-export interface PageAndContext {
-  context: BrowserContext;
-  page: Page;
-}
