@@ -1,16 +1,47 @@
 import { sql } from "drizzle-orm";
-import { int, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { int, sqliteTable, text, real } from "drizzle-orm/sqlite-core";
+
+const created = int("created", { mode: "timestamp" })
+  .default(sql`CURRENT_TIMESTAMP`)
+  .notNull();
 
 export const orders = sqliteTable(
   "order",
   {
     id: text().notNull().primaryKey(),
     orderDate: int("orderDate", { mode: "timestamp" }),
-    created: int("created", { mode: "timestamp" })
-      .default(sql`CURRENT_TIMESTAMP`)
-      .notNull(),
+    created,
     updated: int("updated", { mode: "timestamp" }).notNull(),
-    total: int(),
+    total: real().notNull(),
+  },
+  () => []
+);
+
+export const items = sqliteTable(
+  "item",
+  {
+    id: int().primaryKey({ autoIncrement: true }),
+    orderId: text()
+      .notNull()
+      .references(() => orders.id),
+    name: text().notNull(),
+    price: real().notNull(),
+    created,
+  },
+  () => []
+);
+
+export const transactions = sqliteTable(
+  "transaction",
+  {
+    id: int().primaryKey({ autoIncrement: true }),
+    orderId: text()
+      .notNull()
+      .references(() => orders.id),
+    type: text().notNull(),
+    last4: text().notNull(),
+    amount: real().notNull(),
+    created,
   },
   () => []
 );
