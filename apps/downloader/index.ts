@@ -415,6 +415,7 @@ const main = async (): Promise<void> => {
       console.log(orderData);
       if (orderData) saveOrderData(orderData);
     } else {
+      const existingData = loadOrderData();
       const { page } = await goToOrdersPage(browser);
 
       // Get recent order IDs
@@ -424,8 +425,13 @@ const main = async (): Promise<void> => {
       // Download order data
       for (const orderId of recentOrderIds) {
         console.log(`Extracting data for order ${orderId}...`);
-        const orderData = await extractDataFromInvoice(page, orderId);
-        if (orderData) saveOrderData(orderData);
+        const exists = checkIfOrderExists(existingData, orderId);
+        if (!exists) {
+          const orderData = await extractDataFromInvoice(page, orderId);
+          if (orderData) saveOrderData(orderData);
+        } else {
+          console.log(`Order ${orderId} already exists`);
+        }
       }
     }
   } finally {
