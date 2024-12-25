@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { int, sqliteTable, text, real } from "drizzle-orm/sqlite-core";
 
 const created = int("created", { mode: "timestamp" })
-  .default(sql`CURRENT_TIMESTAMP`)
+  .$default(() => new Date())
   .notNull();
 
 export const orders = sqliteTable(
