@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "start": "ts-node index.ts"
+    "start": "ts-node index.ts",
+    "dbpush": "drizzle-kit push",
+    "dbstudio": "drizzle-kit studio"
   },
   "author": "Kenneth Keim <kkeim77@gmail.com> (https://kennethkeim.com/)",
   "license": "ISC",

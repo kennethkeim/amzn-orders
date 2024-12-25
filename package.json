@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "download": "pnpm run start -F downloader"
+    "download": "pnpm run -F downloader start",
+    "dbpush": "pnpm run -F downloader dbpush",
+    "dbstudio": "pnpm run -F downloader dbstudio"
   },
   "devDependencies": {
     "@types/node": "^22.10.2"
