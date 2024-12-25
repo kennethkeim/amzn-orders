@@ -1,6 +1,5 @@
 import { chromium, Page, BrowserContext } from "playwright";
 import { config } from "dotenv";
-import fs from "fs";
 import path from "path";
 import {
   BaseContext,
@@ -22,7 +21,7 @@ type NewTx = InferInsertModel<typeof transactions>;
 config();
 
 const APP_DIR = path.join(__dirname);
-const ORDER_DATA_PATH = path.join(APP_DIR, "order-data.json");
+const USER_FNAME = process.env.NAME!;
 const USER_DATA_DIR = path.join(APP_DIR, "user-data-dir");
 
 const MOCK = process.argv.includes("--mock");
@@ -52,9 +51,7 @@ const isLoggedIn = async (page: Page): Promise<boolean> => {
       "#nav-link-accountList-nav-line-1"
     );
     console.log("Account text:", accountText);
-    return (
-      accountText?.toLowerCase().includes(`hello, ${process.env.NAME}`) ?? false
-    );
+    return accountText?.toLowerCase().includes(`hello, ${USER_FNAME}`) ?? false;
   } catch (error) {
     return false;
   }
@@ -269,6 +266,7 @@ const saveOrderData = async (newOrders: OrderData[]): Promise<void> => {
     orderDate: o.orderDate ? new Date(o.orderDate) : null,
     total: o.total,
     updated: new Date(),
+    user: USER_FNAME,
   }));
 
   const itemsToInsert = newOrders

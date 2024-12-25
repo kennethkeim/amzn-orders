@@ -13,6 +13,7 @@ export const orders = sqliteTable(
     created,
     updated: int("updated", { mode: "timestamp" }).notNull(),
     total: real().notNull(),
+    user: text().notNull(),
   },
   () => []
 );
