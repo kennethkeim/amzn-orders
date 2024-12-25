@@ -1,6 +1,7 @@
 import { chromium, Page, BrowserContext, Browser } from "playwright";
 import { config } from "dotenv";
 import fs from "fs";
+import path from "path";
 import {
   BaseContext,
   OrderData,
@@ -12,7 +13,10 @@ import {
 
 config();
 
-const ORDER_DATA_PATH = "order-data.json";
+const APP_DIR = path.join(__dirname);
+const ORDER_DATA_PATH = path.join(APP_DIR, "order-data.json");
+const STATE_PATH = path.join(APP_DIR, "state.json");
+
 const MOCK = process.argv.includes("--mock");
 console.log("Mock mode:", MOCK);
 
@@ -282,10 +286,10 @@ const saveOrderData = (orderData: OrderData): void => {
   );
 
   if (orderIndex === -1) {
-    // Add new order
+    console.log(`Adding one order to ${existingData.length} orders`);
     existingData.push(orderData);
   } else {
-    // Update existing order
+    console.log(`Updating one of ${existingData.length} orders`);
     existingData[orderIndex] = orderData;
   }
 
@@ -328,19 +332,17 @@ const handlePasswordReconfirmation = async (page: Page): Promise<boolean> => {
 };
 
 const goToOrdersPage = async (browser: Browser): Promise<PageAndContext> => {
-  const storageStatePath = "state.json";
-
   let context: BrowserContext | undefined;
   let page: Page | undefined;
   let needsLogin = true;
 
   // Create context and single page that we'll reuse
-  if (fs.existsSync(storageStatePath)) {
+  if (fs.existsSync(STATE_PATH)) {
     console.log("Found existing session state, testing if still valid...");
     try {
       context = await browser.newContext({
         ...BASE_CTX,
-        storageState: storageStatePath,
+        storageState: STATE_PATH,
       });
 
       page = await context.newPage();
@@ -373,7 +375,7 @@ const goToOrdersPage = async (browser: Browser): Promise<PageAndContext> => {
     }
 
     console.log("Saving new session state...");
-    await context.storageState({ path: storageStatePath });
+    await context.storageState({ path: STATE_PATH });
   }
 
   if (!context || !page) {
