@@ -69,7 +69,7 @@ const login = async (page: Page): Promise<boolean> => {
 
     // Wait for login to complete and verify
     const loginSuccess = await page
-      .waitForSelector("#nav-link-accountList-nav-line-1", { timeout: 10000 })
+      .waitForSelector("#nav-link-accountList-nav-line-1", { timeout: 30000 })
       .then(() => true)
       .catch(() => false);
 
