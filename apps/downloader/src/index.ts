@@ -9,6 +9,15 @@ import {
   OrderItem,
   EvaluateResult,
 } from "./types";
+import { db } from "./db";
+import { items, orders, transactions } from "./db-schema";
+import { desc } from "drizzle-orm";
+import { InferInsertModel } from "drizzle-orm";
+
+// Define types for inserting into tables
+type NewOrder = InferInsertModel<typeof orders>;
+type NewItem = InferInsertModel<typeof items>;
+type NewTx = InferInsertModel<typeof transactions>;
 
 config();
 
@@ -254,47 +263,40 @@ const extractDataFromInvoice = async (
   }
 };
 
-const loadOrderData = (): OrderData[] => {
-  // Load existing data from file if it exists
-  let existingData: OrderData[] = [];
+const saveOrderData = async (newOrders: OrderData[]): Promise<void> => {
+  const ordersToInsert = newOrders.map<NewOrder>((o) => ({
+    id: o.orderId,
+    orderDate: o.orderDate ? new Date(o.orderDate) : null,
+    total: o.total,
+    updated: new Date(),
+  }));
 
-  if (fs.existsSync(ORDER_DATA_PATH)) {
-    existingData = JSON.parse(fs.readFileSync(ORDER_DATA_PATH, "utf8"));
-  }
+  const itemsToInsert = newOrders
+    .map((o) => {
+      return o.items.map<NewItem>((i) => ({
+        orderId: o.orderId,
+        name: i.name,
+        price: i.price,
+      }));
+    })
+    .flat();
 
-  return existingData;
-};
+  const txToInsert = newOrders
+    .map((o) => {
+      return o.transactions.map<NewTx>((tx) => ({
+        orderId: o.orderId,
+        type: tx.type ?? "Unknown",
+        amount: tx.amount ?? 0,
+        last4: tx.last4 ?? "Unknown",
+      }));
+    })
+    .flat();
 
-const saveToFile = (orderData: OrderData[]): void => {
-  fs.writeFileSync(ORDER_DATA_PATH, JSON.stringify(orderData, null, 2));
-};
-
-const checkIfOrderExists = (
-  orderData: OrderData[],
-  orderId: string
-): boolean => {
-  return orderData.some((order) => order.orderId === orderId);
-};
-
-const saveOrderData = (orderData: OrderData): void => {
-  let existingData = loadOrderData();
-
-  // Check if order already exists
-  const orderIndex = existingData.findIndex(
-    (order) => order.orderId === orderData.orderId
-  );
-
-  if (orderIndex === -1) {
-    console.log(`Adding one order to ${existingData.length} orders`);
-    existingData.push(orderData);
-  } else {
-    console.log(`Updating one of ${existingData.length} orders`);
-    existingData[orderIndex] = orderData;
-  }
-
-  // Save to file
-  saveToFile(existingData);
-  console.log(`Saved data for order ${orderData.orderId}`);
+  await db.transaction(async (tx) => {
+    await tx.insert(orders).values(ordersToInsert);
+    await tx.insert(items).values(itemsToInsert);
+    await tx.insert(transactions).values(txToInsert);
+  });
 };
 
 const handlePasswordReconfirmation = async (page: Page): Promise<boolean> => {
@@ -383,6 +385,16 @@ const main = async (): Promise<void> => {
     ...BASE_CTX,
   });
 
+  const existingOrders = await db
+    .select({ id: orders.id })
+    .from(orders)
+    .orderBy(desc(orders.created))
+    .limit(50);
+  const existingOrderIds = existingOrders.map((o) => o.id);
+  console.log(existingOrderIds);
+
+  const newOrders = [];
+
   try {
     if (MOCK) {
       const page = await goToMockPage(context);
@@ -390,26 +402,28 @@ const main = async (): Promise<void> => {
         page,
         "113-7450326-7014652"
       );
-      console.log(orderData);
-      if (orderData) saveOrderData(orderData);
+      if (orderData) newOrders.push(orderData);
     } else {
-      const existingData = loadOrderData();
       const page = await goToOrdersPage(context);
 
       // Get recent order IDs
       const recentOrderIds = await getRecentOrderIds(page);
       console.log(`Found ${recentOrderIds.length} recent orders`);
 
+      const toCreate = recentOrderIds.filter(
+        (id) => !existingOrderIds.includes(id)
+      );
+      console.log(`Will create ${toCreate.length} orders`);
+
       // Download order data
-      for (const orderId of recentOrderIds) {
+      for (const orderId of toCreate) {
         console.log(`Extracting data for order ${orderId}...`);
-        const exists = checkIfOrderExists(existingData, orderId);
-        if (!exists) {
-          const orderData = await extractDataFromInvoice(page, orderId);
-          if (orderData) saveOrderData(orderData);
-        } else {
-          console.log(`Order ${orderId} already exists`);
-        }
+        const orderData = await extractDataFromInvoice(page, orderId);
+        if (orderData) newOrders.push(orderData);
+      }
+
+      if (newOrders.length) {
+        await saveOrderData(newOrders);
       }
     }
   } finally {
