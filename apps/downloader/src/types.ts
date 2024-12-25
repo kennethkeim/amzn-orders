@@ -1,4 +1,11 @@
-import { Page, BrowserContext } from "playwright";
+export interface Env {
+  /** Amazon account email */
+  email: string;
+  /** Amazon account password */
+  password: string;
+  /** Name shown in Amazon navbar message - e.g. "Hello, {name}" */
+  name: string;
+}
 
 export interface BaseContext {
   userAgent: string;

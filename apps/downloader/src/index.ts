@@ -7,11 +7,11 @@ import {
   Transaction,
   OrderItem,
   EvaluateResult,
+  Env,
 } from "./types";
 import { db } from "./db";
 import { items, orders, transactions } from "./db-schema";
-import { desc } from "drizzle-orm";
-import { InferInsertModel } from "drizzle-orm";
+import { desc, eq, InferInsertModel } from "drizzle-orm";
 
 // Define types for inserting into tables
 type NewOrder = InferInsertModel<typeof orders>;
@@ -21,8 +21,6 @@ type NewTx = InferInsertModel<typeof transactions>;
 config();
 
 const APP_DIR = path.join(__dirname);
-const USER_FNAME = process.env.NAME!;
-const USER_DATA_DIR = path.join(APP_DIR, "user-data-dir");
 
 const MOCK = process.argv.includes("--mock");
 console.log("Mock mode:", MOCK);
@@ -41,7 +39,7 @@ const wait = async (min = 1000, max = 3000): Promise<void> => {
   console.log(`Waited for ${delay}ms`);
 };
 
-const isLoggedIn = async (page: Page): Promise<boolean> => {
+const isLoggedIn = async (page: Page, env: Env): Promise<boolean> => {
   try {
     // Try to find an element that's only visible when logged in
     await page.waitForSelector("#nav-link-accountList-nav-line-1", {
@@ -51,24 +49,24 @@ const isLoggedIn = async (page: Page): Promise<boolean> => {
       "#nav-link-accountList-nav-line-1"
     );
     console.log("Account text:", accountText);
-    return accountText?.toLowerCase().includes(`hello, ${USER_FNAME}`) ?? false;
+    return accountText?.toLowerCase().includes(`hello, ${env.name}`) ?? false;
   } catch (error) {
     return false;
   }
 };
 
-const login = async (page: Page): Promise<boolean> => {
+const login = async (page: Page, env: Env): Promise<boolean> => {
   console.log("Logging in...");
   try {
     await page.goto("https://www.amazon.com/");
     await wait(3000, 5000);
     await page.click("#nav-link-accountList");
     await wait(1000, 2000);
-    await page.fill("#ap_email", process.env.EMAIL ?? "");
+    await page.fill("#ap_email", env.email);
     await wait(800, 1500);
     await page.click("#continue");
     await wait(1000, 2000);
-    await page.fill("#ap_password", process.env.PASS ?? "");
+    await page.fill("#ap_password", env.password);
     await wait(700, 1900);
     await page.click("#signInSubmit");
 
@@ -113,7 +111,6 @@ const getRecentOrderIds = async (page: Page): Promise<string[]> => {
 
   // Filter out any null values and log the found orders
   const validOrders = orders.filter((id) => id !== null);
-  console.log("Found order IDs:", validOrders);
   return validOrders;
 };
 
@@ -260,13 +257,16 @@ const extractDataFromInvoice = async (
   }
 };
 
-const saveOrderData = async (newOrders: OrderData[]): Promise<void> => {
+const saveOrderData = async (
+  newOrders: OrderData[],
+  env: Env
+): Promise<void> => {
   const ordersToInsert = newOrders.map<NewOrder>((o) => ({
     id: o.orderId,
     orderDate: o.orderDate ? new Date(o.orderDate) : null,
     total: o.total,
     updated: new Date(),
-    user: USER_FNAME,
+    user: env.name,
   }));
 
   const itemsToInsert = newOrders
@@ -297,7 +297,10 @@ const saveOrderData = async (newOrders: OrderData[]): Promise<void> => {
   });
 };
 
-const handlePasswordReconfirmation = async (page: Page): Promise<boolean> => {
+const handlePasswordReconfirmation = async (
+  page: Page,
+  env: Env
+): Promise<boolean> => {
   try {
     const passwordField = await page.waitForSelector("#ap_password", {
       timeout: 3000,
@@ -305,7 +308,7 @@ const handlePasswordReconfirmation = async (page: Page): Promise<boolean> => {
     if (passwordField) {
       console.log("Password reconfirmation required...");
       await wait(1000, 2000);
-      await page.fill("#ap_password", process.env.PASS ?? "");
+      await page.fill("#ap_password", env.password);
       await wait(500, 1000);
 
       try {
@@ -330,14 +333,17 @@ const handlePasswordReconfirmation = async (page: Page): Promise<boolean> => {
   }
 };
 
-const goToOrdersPage = async (context: BrowserContext): Promise<Page> => {
+const goToOrdersPage = async (
+  context: BrowserContext,
+  env: Env
+): Promise<Page> => {
   const page = await context.newPage();
   let needsLogin = true;
 
   try {
     await page.goto("https://www.amazon.com/");
 
-    if (await isLoggedIn(page)) {
+    if (await isLoggedIn(page, env)) {
       console.log("Existing session is valid");
       needsLogin = false;
     } else {
@@ -352,7 +358,7 @@ const goToOrdersPage = async (context: BrowserContext): Promise<Page> => {
 
   if (needsLogin) {
     console.log("Logging in to new session...");
-    const loginSuccess = await login(page);
+    const loginSuccess = await login(page, env);
     if (!loginSuccess) {
       throw new Error("Unable to log in to Amazon");
     }
@@ -362,7 +368,7 @@ const goToOrdersPage = async (context: BrowserContext): Promise<Page> => {
   console.log("Navigating to orders page...");
   await page.goto("https://www.amazon.com/gp/your-account/order-history");
   await wait(3000, 5000);
-  await handlePasswordReconfirmation(page);
+  await handlePasswordReconfirmation(page, env);
 
   return page;
 };
@@ -378,31 +384,53 @@ const goToMockPage = async (context: BrowserContext): Promise<Page> => {
 };
 
 const main = async (): Promise<void> => {
-  const context = await chromium.launchPersistentContext(USER_DATA_DIR, {
-    headless: false,
-    ...BASE_CTX,
-  });
+  if (MOCK) {
+    // Add static html to mockserver/index.html and serve it from a dev server for mock mode
+    const browser = await chromium.launch({ headless: false });
+    const ctx = await browser.newContext();
+    const page = await goToMockPage(ctx);
+    const orderData = await extractDataFromInvoice(page, "113-7450326-7014652");
+    if (orderData) console.log(orderData);
+    return;
+  }
 
-  const existingOrders = await db
-    .select({ id: orders.id })
-    .from(orders)
-    .orderBy(desc(orders.created))
-    .limit(50);
-  const existingOrderIds = existingOrders.map((o) => o.id);
-  console.log(existingOrderIds);
+  const emails = (process.env.EMAIL ?? "").split(",");
+  const passwords = (process.env.PASS ?? "").split(",");
+  const names = (process.env.NAME ?? "").split(",");
 
-  const newOrders = [];
-
-  try {
-    if (MOCK) {
-      const page = await goToMockPage(context);
-      const orderData = await extractDataFromInvoice(
-        page,
-        "113-7450326-7014652"
+  // Use traditional loop to avoid concurrent promise.all
+  for (let i = 0; i < emails.length; i++) {
+    const env: Env = {
+      email: emails[i],
+      password: passwords[i],
+      name: names[i],
+    };
+    if (!env.email || !env.name || !env.password) {
+      throw new Error(
+        `Invalid env: missing email/password/name for index: ${i}`
       );
-      if (orderData) newOrders.push(orderData);
-    } else {
-      const page = await goToOrdersPage(context);
+    }
+    console.log(`Downloading orders for ${env.name}...`);
+
+    const existingOrders = await db
+      .select({ id: orders.id })
+      .from(orders)
+      .where(eq(orders.user, env.name))
+      .orderBy(desc(orders.created))
+      .limit(50);
+    const existingOrderIds = existingOrders.map((o) => o.id);
+    console.log(`Found ${existingOrders.length} existing orders`);
+
+    const newOrders = [];
+
+    const USER_DATA_DIR = path.join(APP_DIR, `user-data-dir-${i}`);
+    const context = await chromium.launchPersistentContext(USER_DATA_DIR, {
+      headless: false,
+      ...BASE_CTX,
+    });
+
+    try {
+      const page = await goToOrdersPage(context, env);
 
       // Get recent order IDs
       const recentOrderIds = await getRecentOrderIds(page);
@@ -421,11 +449,11 @@ const main = async (): Promise<void> => {
       }
 
       if (newOrders.length) {
-        await saveOrderData(newOrders);
+        await saveOrderData(newOrders, env);
       }
+    } finally {
+      await context.close();
     }
-  } finally {
-    await context.close();
   }
 };
 
