@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
+    "build": "tsc && cp .env dist/.env",
     "start": "tsx src/index.ts",
     "dbpush": "drizzle-kit push",
     "dbstudio": "drizzle-kit studio"
