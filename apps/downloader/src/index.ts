@@ -20,7 +20,7 @@ type NewOrder = InferInsertModel<typeof orders>;
 type NewItem = InferInsertModel<typeof items>;
 type NewTx = InferInsertModel<typeof transactions>;
 
-const APP_DIR = path.join(__dirname);
+const APP_DIR = path.join(__dirname, "..");
 
 const MOCK = process.argv.includes("--mock");
 const HEADLESS = !process.argv.includes("--head");
