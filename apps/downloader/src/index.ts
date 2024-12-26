@@ -23,6 +23,7 @@ config();
 const APP_DIR = path.join(__dirname);
 
 const MOCK = process.argv.includes("--mock");
+const HEADLESS = !process.argv.includes("--head");
 console.log("Mock mode:", MOCK);
 
 const BASE_CTX: BaseContext = {
@@ -425,7 +426,7 @@ const main = async (): Promise<void> => {
 
     const USER_DATA_DIR = path.join(APP_DIR, `user-data-dir-${i}`);
     const context = await chromium.launchPersistentContext(USER_DATA_DIR, {
-      headless: false,
+      headless: HEADLESS,
       ...BASE_CTX,
     });
 
