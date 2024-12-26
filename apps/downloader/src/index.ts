@@ -1,6 +1,8 @@
-import { chromium, Page, BrowserContext } from "playwright";
-import { config } from "dotenv";
 import path from "path";
+import { config } from "dotenv";
+config({ path: path.join(__dirname, "..", ".env") });
+
+import { chromium, Page, BrowserContext } from "playwright";
 import {
   BaseContext,
   OrderData,
@@ -17,8 +19,6 @@ import { desc, eq, InferInsertModel } from "drizzle-orm";
 type NewOrder = InferInsertModel<typeof orders>;
 type NewItem = InferInsertModel<typeof items>;
 type NewTx = InferInsertModel<typeof transactions>;
-
-config();
 
 const APP_DIR = path.join(__dirname);
 
