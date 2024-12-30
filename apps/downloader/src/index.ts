@@ -23,7 +23,7 @@ type NewTx = InferInsertModel<typeof transactions>;
 const APP_DIR = path.join(__dirname, "..");
 
 const MOCK = process.argv.includes("--mock");
-const HEADLESS = !process.argv.includes("--head");
+const HEADLESS = process.argv.includes("--headless");
 console.log("Mock mode:", MOCK);
 
 const BASE_CTX: BaseContext = {
