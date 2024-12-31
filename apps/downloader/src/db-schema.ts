@@ -5,7 +5,7 @@ const created = int("created", { mode: "timestamp" })
   .$default(() => new Date())
   .notNull();
 
-export const orders = sqliteTable(
+export const orderSchema = sqliteTable(
   "order",
   {
     id: text().notNull().primaryKey(),
@@ -18,13 +18,13 @@ export const orders = sqliteTable(
   () => []
 );
 
-export const items = sqliteTable(
+export const itemSchema = sqliteTable(
   "item",
   {
     id: int().primaryKey({ autoIncrement: true }),
     orderId: text()
       .notNull()
-      .references(() => orders.id),
+      .references(() => orderSchema.id),
     name: text().notNull(),
     price: real().notNull(),
     created,
@@ -32,13 +32,13 @@ export const items = sqliteTable(
   () => []
 );
 
-export const transactions = sqliteTable(
+export const transactionSchema = sqliteTable(
   "transaction",
   {
     id: int().primaryKey({ autoIncrement: true }),
     orderId: text()
       .notNull()
-      .references(() => orders.id),
+      .references(() => orderSchema.id),
     type: text().notNull(),
     last4: text().notNull(),
     amount: real().notNull(),

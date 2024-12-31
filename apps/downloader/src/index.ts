@@ -12,13 +12,13 @@ import {
   Env,
 } from "./types";
 import { db } from "./db";
-import { items, orders, transactions } from "./db-schema";
+import { itemSchema, orderSchema, transactionSchema } from "./db-schema";
 import { desc, eq, InferInsertModel } from "drizzle-orm";
 
 // Define types for inserting into tables
-type NewOrder = InferInsertModel<typeof orders>;
-type NewItem = InferInsertModel<typeof items>;
-type NewTx = InferInsertModel<typeof transactions>;
+type NewOrder = InferInsertModel<typeof orderSchema>;
+type NewItem = InferInsertModel<typeof itemSchema>;
+type NewTx = InferInsertModel<typeof transactionSchema>;
 
 const APP_DIR = path.join(__dirname, "..");
 
@@ -292,9 +292,9 @@ const saveOrderData = async (
     .flat();
 
   await db.transaction(async (tx) => {
-    await tx.insert(orders).values(ordersToInsert);
-    await tx.insert(items).values(itemsToInsert);
-    await tx.insert(transactions).values(txToInsert);
+    await tx.insert(orderSchema).values(ordersToInsert);
+    await tx.insert(itemSchema).values(itemsToInsert);
+    await tx.insert(transactionSchema).values(txToInsert);
   });
 };
 
@@ -414,10 +414,10 @@ const main = async (): Promise<void> => {
     console.log(`Downloading orders for ${env.name}...`);
 
     const existingOrders = await db
-      .select({ id: orders.id })
-      .from(orders)
-      .where(eq(orders.user, env.name))
-      .orderBy(desc(orders.created))
+      .select({ id: orderSchema.id })
+      .from(orderSchema)
+      .where(eq(orderSchema.user, env.name))
+      .orderBy(desc(orderSchema.created))
       .limit(50);
     const existingOrderIds = existingOrders.map((o) => o.id);
     console.log(`Found ${existingOrders.length} existing orders`);
