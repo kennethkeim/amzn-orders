@@ -292,9 +292,15 @@ const saveOrderData = async (
     .flat();
 
   await db.transaction(async (tx) => {
-    await tx.insert(orderSchema).values(ordersToInsert);
-    await tx.insert(itemSchema).values(itemsToInsert);
-    await tx.insert(transactionSchema).values(txToInsert);
+    if (ordersToInsert.length) {
+      await tx.insert(orderSchema).values(ordersToInsert);
+    }
+    if (itemsToInsert.length) {
+      await tx.insert(itemSchema).values(itemsToInsert);
+    }
+    if (txToInsert.length) {
+      await tx.insert(transactionSchema).values(txToInsert);
+    }
   });
 };
 
