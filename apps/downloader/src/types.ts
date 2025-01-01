@@ -1,3 +1,6 @@
+import { InferSelectModel } from "drizzle-orm";
+import { itemSchema, orderSchema, transactionSchema } from "./db-schema";
+
 export interface Env {
   /** Amazon account email */
   email: string;
@@ -35,5 +38,10 @@ export interface OrderData {
   total: number;
   transactions: Transaction[];
 }
+
+export type OrderCardData = InferSelectModel<typeof orderSchema> & {
+  items: InferSelectModel<typeof itemSchema>[];
+  transactions: InferSelectModel<typeof transactionSchema>[];
+};
 
 export type EvaluateResult = Omit<OrderData, "orderId">;

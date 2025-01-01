@@ -4,6 +4,7 @@
   "main": "index.js",
   "scripts": {
     "download": "pnpm run -F downloader start",
+    "view": "pnpm run -F downloader view",
     "dbpush": "pnpm run -F downloader dbpush",
     "dbstudio": "pnpm run -F downloader dbstudio"
   },

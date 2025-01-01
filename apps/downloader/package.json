@@ -5,6 +5,7 @@
   "scripts": {
     "build": "tsc",
     "start": "ts-node src/index.ts",
+    "view": "ts-node src/view.ts",
     "dbpush": "drizzle-kit push",
     "dbstudio": "drizzle-kit studio"
   },

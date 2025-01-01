@@ -1,4 +1,3 @@
-import { sql } from "drizzle-orm";
 import { int, sqliteTable, text, real } from "drizzle-orm/sqlite-core";
 
 const created = int("created", { mode: "timestamp" })
