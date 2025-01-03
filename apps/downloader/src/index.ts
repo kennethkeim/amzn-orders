@@ -133,6 +133,9 @@ const extractDataFromInvoice = async (
         const str = text?.split("$").pop()?.trim() ?? "0";
         return parseFloat(str);
       };
+      const roundTo2 = (num: number): number => {
+        return Math.round((num + Number.EPSILON) * 100) / 100;
+      };
 
       // Get order date - find text content that includes "Order Placed:"
       let orderDate: string | null = null;
@@ -177,17 +180,20 @@ const extractDataFromInvoice = async (
           return e;
         })
         .filter((e): e is Element => e !== null)
-        .map((tr): Transaction => {
+        .map((tr): Transaction[] => {
           const tds = Array.from(tr.querySelectorAll("td")).filter((td) => {
-            return td.childNodes.length === 1;
+            // Return only elements that have no child nodes (only text content)
+            return td.children.length === 0;
           });
 
+          const tx: Transaction[] = [];
           let amount: number | null = null,
             type: string | null = null,
             last4: string | null = null;
 
-          // Get price, type, and last4 from the tds with only one child node
+          // Get price, type, and last4 from the tds with only one (text) child node
           for (const td of tds) {
+            // td 1 will have last 4 and type, td 2 will have amount
             const text = td.textContent?.trim() ?? "";
             if (text.includes("ending in")) {
               last4 = text.split("ending in").pop()?.trim() ?? null;
@@ -197,9 +203,17 @@ const extractDataFromInvoice = async (
             if (text.includes("$")) {
               amount = getDollarAmount(text);
             }
+            if (last4 && type && amount !== null) {
+              // Add transaction and reset variables
+              tx.push({ type, last4, amount });
+              amount = null;
+              type = null;
+              last4 = null;
+            }
           }
-          return { type, last4, amount };
+          return tx;
         })
+        .flat()
         .filter(
           (t): t is Transaction =>
             t.type !== null && t.last4 !== null && t.amount !== null
@@ -231,9 +245,11 @@ const extractDataFromInvoice = async (
 
         // note: will be only one grand total
         total = grandTotal.reduce((sum, t) => sum + (t.amount ?? 0), 0);
+        total = roundTo2(total);
       } else {
         // Sum all transaction amounts
         total = transactions.reduce((sum, t) => sum + (t.amount ?? 0), 0);
+        total = roundTo2(total);
       }
 
       return {
@@ -396,8 +412,9 @@ const main = async (): Promise<void> => {
     const browser = await chromium.launch({ headless: false });
     const ctx = await browser.newContext();
     const page = await goToMockPage(ctx);
-    const orderData = await extractDataFromInvoice(page, "113-7450326-7014652");
+    const orderData = await extractDataFromInvoice(page, "111-7057469-3222651");
     if (orderData) console.log(orderData);
+    await browser.close();
     return;
   }
 
