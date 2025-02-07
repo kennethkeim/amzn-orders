@@ -1,10 +1,12 @@
-import { int, sqliteTable, text, real } from "drizzle-orm/sqlite-core";
+import { int, text, real, sqliteTableCreator } from "drizzle-orm/sqlite-core";
+
+export const createTable = sqliteTableCreator((name) => `keimdigital_${name}`);
 
 const created = int("created", { mode: "timestamp" })
   .$default(() => new Date())
   .notNull();
 
-export const orderSchema = sqliteTable(
+export const orderSchema = createTable(
   "order",
   {
     id: text().notNull().primaryKey(),
@@ -17,7 +19,7 @@ export const orderSchema = sqliteTable(
   () => []
 );
 
-export const itemSchema = sqliteTable(
+export const itemSchema = createTable(
   "item",
   {
     id: int().primaryKey({ autoIncrement: true }),
@@ -31,7 +33,7 @@ export const itemSchema = sqliteTable(
   () => []
 );
 
-export const transactionSchema = sqliteTable(
+export const transactionSchema = createTable(
   "transaction",
   {
     id: int().primaryKey({ autoIncrement: true }),
