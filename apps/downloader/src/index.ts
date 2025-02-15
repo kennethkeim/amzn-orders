@@ -2,9 +2,8 @@ import path from "path";
 import { config } from "dotenv";
 config({ path: path.join(__dirname, "..", ".env") });
 
-import { chromium, Page, BrowserContext } from "playwright";
+import puppeteer, { Page, Browser } from "puppeteer";
 import {
-  BaseContext,
   OrderData,
   Transaction,
   OrderItem,
@@ -26,14 +25,6 @@ const MOCK = process.argv.includes("--mock");
 const HEADLESS = process.argv.includes("--headless");
 console.log("Mock mode:", MOCK);
 
-const BASE_CTX: BaseContext = {
-  userAgent:
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
-  javaScriptEnabled: true,
-  timezoneId: "America/New_York",
-  geolocation: { latitude: 40.0794, longitude: -76.3141 },
-};
-
 const wait = async (min = 1000, max = 3000): Promise<void> => {
   const delay = Math.floor(Math.random() * (max - min + 1)) + min;
   await new Promise((resolve) => setTimeout(resolve, delay));
@@ -46,8 +37,9 @@ const isLoggedIn = async (page: Page, env: Env): Promise<boolean> => {
     await page.waitForSelector("#nav-link-accountList-nav-line-1", {
       timeout: 3000,
     });
-    const accountText = await page.textContent(
-      "#nav-link-accountList-nav-line-1"
+    const accountText = await page.$eval(
+      "#nav-link-accountList-nav-line-1",
+      (el) => el.textContent
     );
     console.log("Account text:", accountText);
     return accountText?.toLowerCase().includes(`hello, ${env.name}`) ?? false;
@@ -63,11 +55,11 @@ const login = async (page: Page, env: Env): Promise<boolean> => {
     await wait(3000, 5000);
     await page.click("#nav-link-accountList");
     await wait(1000, 2000);
-    await page.fill("#ap_email", env.email);
+    await page.type("#ap_email", env.email);
     await wait(800, 1500);
     await page.click("#continue");
     await wait(1000, 2000);
-    await page.fill("#ap_password", env.password);
+    await page.type("#ap_password", env.password);
     await wait(700, 1900);
     await page.click("#signInSubmit");
 
@@ -96,7 +88,7 @@ const getRecentOrderIds = async (page: Page): Promise<string[]> => {
   console.log("Getting recent order IDs...");
   await page.waitForSelector(".order-card");
 
-  const orders = await page.$$eval(".order-card", (cards: Element[]) => {
+  const orders = await page.$$eval(".order-card", (cards) => {
     return cards.slice(0, 10).map((card) => {
       // Find the order ID element within the card
       const orderIdElement = card.querySelector(
@@ -111,7 +103,7 @@ const getRecentOrderIds = async (page: Page): Promise<string[]> => {
   });
 
   // Filter out any null values and log the found orders
-  const validOrders = orders.filter((id) => id !== null);
+  const validOrders = orders.filter((id): id is string => id !== null);
   return validOrders;
 };
 
@@ -331,13 +323,16 @@ const handlePasswordReconfirmation = async (
     if (passwordField) {
       console.log("Password reconfirmation required...");
       await wait(1000, 2000);
-      await page.fill("#ap_password", env.password);
+      await page.type("#ap_password", env.password);
       await wait(500, 1000);
 
       try {
-        await page.check('input[name="rememberMe"]', { timeout: 5000 });
-        console.log("Checked 'Keep me signed in' box");
-        await wait(500, 1000);
+        const checkbox = await page.$('input[name="rememberMe"]');
+        if (checkbox) {
+          await checkbox.click();
+          console.log("Checked 'Keep me signed in' box");
+          await wait(500, 1000);
+        }
       } catch (error) {
         console.log(
           "No 'Keep me signed in' checkbox found:",
@@ -346,7 +341,7 @@ const handlePasswordReconfirmation = async (
       }
 
       await page.click("#signInSubmit");
-      await page.waitForLoadState("networkidle");
+      await page.waitForNavigation({ waitUntil: "networkidle0" });
       return true;
     }
     return false;
@@ -356,11 +351,8 @@ const handlePasswordReconfirmation = async (
   }
 };
 
-const goToOrdersPage = async (
-  context: BrowserContext,
-  env: Env
-): Promise<Page> => {
-  const page = await context.newPage();
+const goToOrdersPage = async (browser: Browser, env: Env): Promise<Page> => {
+  const page = await browser.newPage();
   let needsLogin = true;
 
   try {
@@ -396,8 +388,8 @@ const goToOrdersPage = async (
   return page;
 };
 
-const goToMockPage = async (context: BrowserContext): Promise<Page> => {
-  const page = await context.newPage();
+const goToMockPage = async (browser: Browser): Promise<Page> => {
+  const page = await browser.newPage();
 
   // Navigate to orders page
   console.log("Navigating to mock page...");
@@ -409,9 +401,8 @@ const goToMockPage = async (context: BrowserContext): Promise<Page> => {
 const main = async (): Promise<void> => {
   if (MOCK) {
     // Add static html to mockserver/index.html and serve it from a dev server for mock mode
-    const browser = await chromium.launch({ headless: false });
-    const ctx = await browser.newContext();
-    const page = await goToMockPage(ctx);
+    const browser = await puppeteer.launch({ headless: false });
+    const page = await goToMockPage(browser);
     const orderData = await extractDataFromInvoice(page, "111-7057469-3222651");
     if (orderData) console.log(orderData);
     await browser.close();
@@ -448,13 +439,15 @@ const main = async (): Promise<void> => {
     const newOrders = [];
 
     const USER_DATA_DIR = path.join(APP_DIR, `user-data-dir-${i}`);
-    const context = await chromium.launchPersistentContext(USER_DATA_DIR, {
+    const browser = await puppeteer.launch({
       headless: HEADLESS,
-      ...BASE_CTX,
+      userDataDir: USER_DATA_DIR,
+      defaultViewport: null,
+      args: ["--start-maximized"],
     });
 
     try {
-      const page = await goToOrdersPage(context, env);
+      const page = await goToOrdersPage(browser, env);
 
       // Get recent order IDs
       const recentOrderIds = await getRecentOrderIds(page);
@@ -476,7 +469,7 @@ const main = async (): Promise<void> => {
         await saveOrderData(newOrders, env);
       }
     } finally {
-      await context.close();
+      await browser.close();
     }
   }
 };

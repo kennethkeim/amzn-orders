@@ -10,16 +10,6 @@ export interface Env {
   name: string;
 }
 
-export interface BaseContext {
-  userAgent: string;
-  javaScriptEnabled: boolean;
-  timezoneId: string;
-  geolocation: {
-    latitude: number;
-    longitude: number;
-  };
-}
-
 export interface OrderItem {
   name: string;
   price: number;
