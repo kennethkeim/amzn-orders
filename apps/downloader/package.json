@@ -18,7 +18,7 @@
     "dotenv": "^16.4.7",
     "drizzle-orm": "^0.38.2",
     "picocolors": "^1.1.1",
-    "puppeteer": "^24.2.1"
+    "puppeteer": "^23.11.1"
   },
   "devDependencies": {
     "drizzle-kit": "^0.30.1",
