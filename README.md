@@ -42,6 +42,10 @@ This uses the built-in macOs Automator to tell terminal to run your command.
 
 Now the job should run in the existing terminal window each time, and the browser should open and go through the steps. If the terminal window doesn't appear in the foreground just open a window manually and then re-run and it should use that window.
 
+Go to the Lingon menu bar > tools > power and enter the times you need the computer to wake up. This will allow you to use a normal sleep schedule whenever your computer isn't running a task.
+
+Plug in your mac and put it in the basement or closet. 😅
+
 # Displaying the orders
 
 Displaying orders is up to you, but it should be easy to do in your favorite framework once the orders are in the DB. I integrated it into an existing app I built for myself.
