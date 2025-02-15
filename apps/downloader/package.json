@@ -17,6 +17,7 @@
     "@libsql/client": "^0.14.0",
     "dotenv": "^16.4.7",
     "drizzle-orm": "^0.38.2",
+    "picocolors": "^1.1.1",
     "playwright": "^1.49.1"
   },
   "devDependencies": {

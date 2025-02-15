@@ -13,6 +13,26 @@ import {
 import { db } from "./db";
 import { itemSchema, orderSchema, transactionSchema } from "./db-schema";
 import { desc, eq, InferInsertModel } from "drizzle-orm";
+import { green, gray, yellow } from "picocolors";
+
+class Logger {
+  private toStr(text: string | object): string {
+    return typeof text === "string" ? text : JSON.stringify(text, null, 2);
+  }
+
+  info(text: string | object): void {
+    console.log(this.toStr(text));
+  }
+
+  debug(text: string | object): void {
+    console.log(gray(this.toStr(text)));
+  }
+
+  warn(text: string | object): void {
+    console.log(yellow(this.toStr(text)));
+  }
+}
+const logger = new Logger();
 
 // Define types for inserting into tables
 type NewOrder = InferInsertModel<typeof orderSchema>;
@@ -23,12 +43,12 @@ const APP_DIR = path.join(__dirname, "..");
 
 const MOCK = process.argv.includes("--mock");
 const HEADLESS = process.argv.includes("--headless");
-console.log("Mock mode:", MOCK);
+logger.info(`Mock mode: ${MOCK}`);
 
 const wait = async (min = 1000, max = 3000): Promise<void> => {
   const delay = Math.floor(Math.random() * (max - min + 1)) + min;
   await new Promise((resolve) => setTimeout(resolve, delay));
-  console.log(`Waited for ${delay}ms`);
+  logger.debug(`Waited for ${delay}ms`);
 };
 
 const isLoggedIn = async (page: Page, env: Env): Promise<boolean> => {
@@ -41,7 +61,7 @@ const isLoggedIn = async (page: Page, env: Env): Promise<boolean> => {
       "#nav-link-accountList-nav-line-1",
       (el) => el.textContent
     );
-    console.log("Account text:", accountText);
+    logger.debug(`Account text: ${accountText}`);
     return accountText?.toLowerCase().includes(`hello, ${env.name}`) ?? false;
   } catch (error) {
     return false;
@@ -49,7 +69,7 @@ const isLoggedIn = async (page: Page, env: Env): Promise<boolean> => {
 };
 
 const login = async (page: Page, env: Env): Promise<boolean> => {
-  console.log("Logging in...");
+  logger.info("Logging in...");
   try {
     await page.goto("https://www.amazon.com/");
     await wait(3000, 5000);
@@ -73,7 +93,7 @@ const login = async (page: Page, env: Env): Promise<boolean> => {
       throw new Error("Login failed - couldn't verify login status");
     }
 
-    console.log("Login successful");
+    logger.info("Login successful");
     return true;
   } catch (error) {
     console.error(
@@ -85,7 +105,7 @@ const login = async (page: Page, env: Env): Promise<boolean> => {
 };
 
 const getRecentOrderIds = async (page: Page): Promise<string[]> => {
-  console.log("Getting recent order IDs...");
+  logger.debug("Getting recent order IDs...");
   await page.waitForSelector(".order-card");
 
   const orders = await page.$$eval(".order-card", (cards) => {
@@ -321,7 +341,7 @@ const handlePasswordReconfirmation = async (
       timeout: 3000,
     });
     if (passwordField) {
-      console.log("Password reconfirmation required...");
+      logger.warn("Password reconfirmation required...");
       await wait(1000, 2000);
       await page.type("#ap_password", env.password);
       await wait(500, 1000);
@@ -330,14 +350,12 @@ const handlePasswordReconfirmation = async (
         const checkbox = await page.$('input[name="rememberMe"]');
         if (checkbox) {
           await checkbox.click();
-          console.log("Checked 'Keep me signed in' box");
+          logger.debug("Checked 'Keep me signed in' box");
           await wait(500, 1000);
         }
       } catch (error) {
-        console.log(
-          "No 'Keep me signed in' checkbox found:",
-          error instanceof Error ? error.message : String(error)
-        );
+        const errStr = error instanceof Error ? error.message : String(error);
+        console.error(`No 'Keep me signed in' checkbox found:`, errStr);
       }
 
       await page.click("#signInSubmit");
@@ -359,20 +377,18 @@ const goToOrdersPage = async (browser: Browser, env: Env): Promise<Page> => {
     await page.goto("https://www.amazon.com/");
 
     if (await isLoggedIn(page, env)) {
-      console.log("Existing session is valid");
+      logger.info("Existing session is valid");
       needsLogin = false;
     } else {
-      console.log("No valid session found");
+      logger.info("No valid session found");
     }
   } catch (error) {
-    console.log(
-      "Error checking login:",
-      error instanceof Error ? error.message : String(error)
-    );
+    const errStr = error instanceof Error ? error.message : String(error);
+    console.error("Error checking login", errStr);
   }
 
   if (needsLogin) {
-    console.log("Logging in to new session...");
+    logger.info("Logging in to new session...");
     const loginSuccess = await login(page, env);
     if (!loginSuccess) {
       throw new Error("Unable to log in to Amazon");
@@ -380,7 +396,7 @@ const goToOrdersPage = async (browser: Browser, env: Env): Promise<Page> => {
   }
 
   // Navigate to orders page
-  console.log("Navigating to orders page...");
+  logger.debug("Navigating to orders page...");
   await page.goto("https://www.amazon.com/gp/your-account/order-history");
   await wait(3000, 5000);
   await handlePasswordReconfirmation(page, env);
@@ -392,7 +408,7 @@ const goToMockPage = async (browser: Browser): Promise<Page> => {
   const page = await browser.newPage();
 
   // Navigate to orders page
-  console.log("Navigating to mock page...");
+  logger.debug("Navigating to mock page...");
   await page.goto("http://localhost:4200");
 
   return page;
@@ -404,7 +420,7 @@ const main = async (): Promise<void> => {
     const browser = await puppeteer.launch({ headless: false });
     const page = await goToMockPage(browser);
     const orderData = await extractDataFromInvoice(page, "111-7057469-3222651");
-    if (orderData) console.log(orderData);
+    if (orderData) logger.info(orderData);
     await browser.close();
     return;
   }
@@ -425,7 +441,7 @@ const main = async (): Promise<void> => {
         `Invalid env: missing email/password/name for index: ${i}`
       );
     }
-    console.log(`Downloading orders for ${env.name}...`);
+    logger.info(`\nExtracting orders for ${env.name}...`);
 
     const existingOrders = await db
       .select({ id: orderSchema.id })
@@ -434,7 +450,7 @@ const main = async (): Promise<void> => {
       .orderBy(desc(orderSchema.created))
       .limit(50);
     const existingOrderIds = existingOrders.map((o) => o.id);
-    console.log(`Found ${existingOrders.length} existing orders`);
+    logger.debug(`Found ${existingOrders.length} existing orders in DB`);
 
     const newOrders = [];
 
@@ -451,16 +467,18 @@ const main = async (): Promise<void> => {
 
       // Get recent order IDs
       const recentOrderIds = await getRecentOrderIds(page);
-      console.log(`Found ${recentOrderIds.length} recent orders`);
+      logger.debug(`Found ${recentOrderIds.length} recent orders in Amazon`);
 
       const toCreate = recentOrderIds.filter(
         (id) => !existingOrderIds.includes(id)
       );
-      console.log(`Will create ${toCreate.length} orders`);
+      toCreate.length
+        ? console.log(green(`💾 Inserting ${toCreate.length} orders into DB`))
+        : logger.info("No orders to insert");
 
       // Download order data
       for (const orderId of toCreate) {
-        console.log(`Extracting data for order ${orderId}...`);
+        logger.debug(`Extracting data for order ${orderId}...`);
         const orderData = await extractDataFromInvoice(page, orderId);
         if (orderData) newOrders.push(orderData);
       }
@@ -472,6 +490,8 @@ const main = async (): Promise<void> => {
       await browser.close();
     }
   }
+
+  console.log("");
 };
 
 main().catch((error: unknown) => {
