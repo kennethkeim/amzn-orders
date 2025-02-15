@@ -14,6 +14,7 @@ import { db } from "./db";
 import { itemSchema, orderSchema, transactionSchema } from "./db-schema";
 import { desc, eq, InferInsertModel } from "drizzle-orm";
 import { green, gray, yellow } from "picocolors";
+import { Mailer, emailError } from "@kennethkeim/api-utils-core";
 
 class Logger {
   private toStr(text: string | object): string {
@@ -43,6 +44,7 @@ const APP_DIR = path.join(__dirname, "..");
 
 const MOCK = process.argv.includes("--mock");
 const HEADLESS = process.argv.includes("--headless");
+const mailerApiKeyExists = Boolean(process.env["MAILER_API_KEY"]);
 logger.info(`Mock mode: ${MOCK}`);
 
 const wait = async (min = 1000, max = 3000): Promise<void> => {
@@ -499,5 +501,11 @@ main().catch((error: unknown) => {
     "Script failed:",
     error instanceof Error ? error.message : String(error)
   );
+
+  if (mailerApiKeyExists) {
+    const mailer = new Mailer("Amazon Order Script");
+    emailError(error, mailer).catch((e) => console.error(e));
+  }
+
   process.exit(1);
 });
