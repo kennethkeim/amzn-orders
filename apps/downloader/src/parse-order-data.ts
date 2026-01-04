@@ -1,4 +1,29 @@
 import { EvaluateResult, OrderItem } from "./types";
+import { logger } from "./logger";
+import { Page } from "puppeteer";
+
+export const getRecentOrderIds = async (page: Page): Promise<string[]> => {
+  logger.debug("Getting recent order IDs...");
+  await page.waitForSelector(".order-card");
+
+  const orders = await page.$$eval(".order-card", (cards) => {
+    return cards.slice(0, 10).map((card) => {
+      // Find the order ID element within the card
+      const orderIdElement = card.querySelector(
+        '.yohtmlc-order-id span[dir="ltr"]'
+      );
+      if (!orderIdElement) return null;
+
+      // Get the order ID text and clean it up
+      const orderId = orderIdElement.textContent?.trim() ?? null;
+      return orderId;
+    });
+  });
+
+  // Filter out any null values and log the found orders
+  const validOrders = orders.filter((id): id is string => id !== null);
+  return validOrders;
+};
 
 export function parseOrderDetailsFromPage(): EvaluateResult | null {
   console.log(

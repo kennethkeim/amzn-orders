@@ -1,4 +1,4 @@
-import { InferSelectModel } from "drizzle-orm";
+import { InferInsertModel, InferSelectModel } from "drizzle-orm";
 import { budgetLineItems, budgetOrders, budgetTransactions } from "./db-schema";
 
 export interface Env {
@@ -37,3 +37,8 @@ export type OrderCardData = InferSelectModel<typeof budgetOrders> & {
 };
 
 export type EvaluateResult = Omit<OrderData, "orderId">;
+
+// Define types for inserting into tables
+export type NewOrder = InferInsertModel<typeof budgetOrders>;
+export type NewItem = InferInsertModel<typeof budgetLineItems>;
+export type NewTx = InferInsertModel<typeof budgetTransactions>;
