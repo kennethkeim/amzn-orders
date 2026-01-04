@@ -20,7 +20,7 @@ import {
   isLoggedIn,
   login,
 } from "./amazon-login";
-import { ServiceError } from "@kennethkeim/core";
+import { CustomError, ServiceError } from "@kennethkeim/core";
 
 const APP_DIR = path.join(__dirname, "..");
 
@@ -197,9 +197,13 @@ const main = async (): Promise<void> => {
   console.log("");
 };
 
-main().catch(async (cause) => {
+main().catch(async (error) => {
   handleError(
-    new ServiceError(500, "Failed to scrape Amazon order data", { cause })
+    error instanceof CustomError
+      ? error
+      : new ServiceError(500, "Failed to scrape Amazon order data", {
+          cause: error,
+        })
   );
 
   // Tell Node.js to exit with an error exit code, but don't call .exit() directly
