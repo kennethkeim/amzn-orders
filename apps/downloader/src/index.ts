@@ -197,6 +197,6 @@ main().catch(async (error: unknown) => {
   // Tell Node.js to exit with an error exit code, but don't call .exit() directly
   // This allows Node to finish any async work (e.g. sending error email) that was not awaited
   // Even logging to stdout can be async, so logs can get truncated if you call .exit()
-  // See jsdoc notes on .exitCode() message, or look at MDN for more info
+  // See jsdoc notes on .exitCode(), or look at MDN for more info
   process.exitCode = 1;
 });
