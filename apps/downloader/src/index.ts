@@ -67,9 +67,10 @@ const goToOrdersListPage = async (
   page.on("console", (msg) => {
     const type = msg.type();
     const text = msg.text();
-    if (type === "log") console.log("[Browser]", text);
-    else if (type === "warn") console.warn("[Browser]", text);
-    else if (type === "error") console.error("[Browser]", text);
+    // We generally don't need this but we can toggle it on if debug info is needed
+    // if (type === "log") console.log("[Browser]", text);
+    if (type === "warn") console.warn("[Browser]", text);
+    if (type === "error") console.error("[Browser]", text);
   });
 
   await page.goto("https://www.amazon.com/");
