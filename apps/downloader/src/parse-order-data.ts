@@ -4,7 +4,7 @@ import { Page } from "puppeteer";
 
 export const getRecentOrderIds = async (page: Page): Promise<string[]> => {
   logger.debug("Getting recent order IDs...");
-  await page.waitForSelector(".order-card");
+  await page.waitForSelector(".order-card", { timeout: 5000 });
 
   const orders = await page.$$eval(".order-card", (cards) => {
     return cards.slice(0, 10).map((card) => {
