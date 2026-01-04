@@ -8,13 +8,12 @@ import { db } from "./db";
 import { budgetOrders } from "./db-schema";
 import { desc } from "drizzle-orm";
 import { green } from "picocolors";
-import { Mailer, emailError } from "@kennethkeim/api-utils-core";
 import {
   getRecentOrderIds,
   parseOrderDetailsFromPage,
 } from "./parse-order-data";
 import { logger } from "./logger";
-import { getOrderUrl, wait } from "./utils";
+import { getOrderUrl, handleError, wait } from "./utils";
 import { saveOrderData } from "./db-operations";
 import {
   handlePasswordReconfirmation,
@@ -26,7 +25,6 @@ const APP_DIR = path.join(__dirname, "..");
 
 const MOCK = process.argv.includes("--mock");
 const HEADLESS = process.argv.includes("--headless");
-const mailerApiKeyExists = Boolean(process.env["MAILER_API_KEY"]);
 logger.info(`Mock mode: ${MOCK}`);
 
 const extractDataFromInvoice = async (
@@ -54,10 +52,7 @@ const extractDataFromInvoice = async (
 
     return { orderId, ...orderData };
   } catch (error) {
-    console.error(
-      `[Outer] Failed to extract data for order ${orderId}:`,
-      error instanceof Error ? error.message : String(error)
-    );
+    handleError(error, `Failed to extract data for order ${orderId}`);
     return null;
   }
 };
@@ -77,23 +72,11 @@ const goToOrdersListPage = async (
     else if (type === "error") console.error("[Browser]", text);
   });
 
-  let needsLogin = true;
+  await page.goto("https://www.amazon.com/");
+  const loggedIn = await isLoggedIn(page, env);
+  logger.info(`${loggedIn ? "Valid session found" : "No session found"}`);
 
-  try {
-    await page.goto("https://www.amazon.com/");
-
-    if (await isLoggedIn(page, env)) {
-      logger.info("Existing session is valid");
-      needsLogin = false;
-    } else {
-      logger.info("No valid session found");
-    }
-  } catch (error) {
-    const errStr = error instanceof Error ? error.message : String(error);
-    console.error("Error checking login", errStr);
-  }
-
-  if (needsLogin) {
+  if (!loggedIn) {
     logger.info("Logging in to new session...");
     const loginSuccess = await login(page, env);
     if (!loginSuccess) {
@@ -208,16 +191,12 @@ const main = async (): Promise<void> => {
   console.log("");
 };
 
-main().catch((error: unknown) => {
-  console.error(
-    "Script failed:",
-    error instanceof Error ? error.message : String(error)
-  );
+main().catch(async (error: unknown) => {
+  handleError(error, "Failed to scrape Amazon order data");
 
-  if (mailerApiKeyExists) {
-    const mailer = new Mailer("Amazon Order Script");
-    emailError(error, mailer).catch((e) => console.error(e));
-  }
-
-  process.exit(1);
+  // Tell Node.js to exit with an error exit code, but don't call .exit() directly
+  // This allows Node to finish any async work (e.g. sending error email) that was not awaited
+  // Even logging to stdout can be async, so logs can get truncated if you call .exit()
+  // See jsdoc notes on .exitCode() message, or look at MDN for more info
+  process.exitCode = 1;
 });

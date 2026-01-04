@@ -18,6 +18,10 @@ export class Logger {
   warn(...args: unknown[]): void {
     console.log(yellow(args.map((arg) => this.toStr(arg)).join(" ")));
   }
+
+  error(...args: unknown[]): void {
+    console.error(args);
+  }
 }
 
 export const logger = new Logger();

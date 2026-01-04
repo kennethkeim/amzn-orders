@@ -1,5 +1,5 @@
 import { logger } from "./logger";
-import { wait } from "./utils";
+import { handleError, wait } from "./utils";
 import { Env } from "./types";
 import { Page } from "puppeteer";
 
@@ -19,6 +19,7 @@ export const isLoggedIn = async (page: Page, env: Env): Promise<boolean> => {
       false
     );
   } catch (error) {
+    handleError(error, "Failed to check login status");
     return false;
   }
 };
@@ -45,16 +46,13 @@ export const login = async (page: Page, env: Env): Promise<boolean> => {
       .catch(() => false);
 
     if (!loginSuccess) {
-      throw new Error("Login failed - couldn't verify login status");
+      throw new Error("Could not verify if login succeeded");
     }
 
     logger.info("Login successful");
     return true;
   } catch (error) {
-    console.error(
-      "Login failed:",
-      error instanceof Error ? error.message : String(error)
-    );
+    handleError(error, "Failed to log in");
     return false;
   }
 };
@@ -62,36 +60,32 @@ export const login = async (page: Page, env: Env): Promise<boolean> => {
 export const handlePasswordReconfirmation = async (
   page: Page,
   env: Env
-): Promise<boolean> => {
+): Promise<void> => {
   try {
     const passwordField = await page.waitForSelector("#ap_password", {
       timeout: 3000,
     });
-    if (passwordField) {
-      logger.warn("Password reconfirmation required...");
-      await wait(1000, 2000);
-      await page.type("#ap_password", env.password);
-      await wait(500, 1000);
+    if (!passwordField) return;
 
-      try {
-        const checkbox = await page.$('input[name="rememberMe"]');
-        if (checkbox) {
-          await checkbox.click();
-          logger.debug("Checked 'Keep me signed in' box");
-          await wait(500, 1000);
-        }
-      } catch (error) {
-        const errStr = error instanceof Error ? error.message : String(error);
-        console.error(`No 'Keep me signed in' checkbox found:`, errStr);
+    logger.warn("Password reconfirmation required...");
+    await wait(1000, 2000);
+    await page.type("#ap_password", env.password);
+    await wait(500, 1000);
+
+    try {
+      const checkbox = await page.$('input[name="rememberMe"]');
+      if (checkbox) {
+        await checkbox.click();
+        logger.debug("Checked 'Keep me signed in' box");
+        await wait(500, 1000);
       }
-
-      await page.click("#signInSubmit");
-      await page.waitForNavigation({ waitUntil: "networkidle0" });
-      return true;
+    } catch (error) {
+      handleError(error, `Failed to check 'Keep me signed in' checkbox`);
     }
-    return false;
+
+    await page.click("#signInSubmit");
+    await page.waitForNavigation({ waitUntil: "networkidle0" });
   } catch (error) {
-    // No password reconfirmation needed
-    return false;
+    handleError(error, "No password reconfirmation needed (probably)");
   }
 };
