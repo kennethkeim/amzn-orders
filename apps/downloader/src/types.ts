@@ -1,5 +1,5 @@
 import { InferSelectModel } from "drizzle-orm";
-import { itemSchema, orderSchema, transactionSchema } from "./db-schema";
+import { budgetLineItems, budgetOrders, budgetTransactions } from "./db-schema";
 
 export interface Env {
   /** Amazon account email */
@@ -13,12 +13,14 @@ export interface Env {
 export interface OrderItem {
   name: string;
   price: number;
+  photo?: string;
+  productLink?: string;
 }
 
 export interface Transaction {
-  type: string | null;
-  last4: string | null;
+  date: string;
   amount: number | null;
+  paymentMethod: string | null;
 }
 
 export interface OrderData {
@@ -29,9 +31,9 @@ export interface OrderData {
   transactions: Transaction[];
 }
 
-export type OrderCardData = InferSelectModel<typeof orderSchema> & {
-  items: InferSelectModel<typeof itemSchema>[];
-  transactions: InferSelectModel<typeof transactionSchema>[];
+export type OrderCardData = InferSelectModel<typeof budgetOrders> & {
+  items: InferSelectModel<typeof budgetLineItems>[];
+  transactions: InferSelectModel<typeof budgetTransactions>[];
 };
 
 export type EvaluateResult = Omit<OrderData, "orderId">;

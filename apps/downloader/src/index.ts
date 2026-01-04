@@ -3,43 +3,19 @@ import { config } from "dotenv";
 config({ path: path.join(__dirname, "..", ".env") });
 
 import puppeteer, { Page, Browser } from "puppeteer";
-import {
-  OrderData,
-  Transaction,
-  OrderItem,
-  EvaluateResult,
-  Env,
-} from "./types";
+import { OrderData, Env } from "./types";
 import { db } from "./db";
-import { itemSchema, orderSchema, transactionSchema } from "./db-schema";
-import { desc, eq, InferInsertModel } from "drizzle-orm";
-import { green, gray, yellow } from "picocolors";
+import { budgetLineItems, budgetOrders, budgetTransactions } from "./db-schema";
+import { desc, InferInsertModel } from "drizzle-orm";
+import { green } from "picocolors";
 import { Mailer, emailError } from "@kennethkeim/api-utils-core";
 import { parseOrderDetailsFromPage } from "./order-detail";
-
-class Logger {
-  private toStr(text: string | object): string {
-    return typeof text === "string" ? text : JSON.stringify(text, null, 2);
-  }
-
-  info(text: string | object): void {
-    console.log(this.toStr(text));
-  }
-
-  debug(text: string | object): void {
-    console.log(gray(this.toStr(text)));
-  }
-
-  warn(text: string | object): void {
-    console.log(yellow(this.toStr(text)));
-  }
-}
-const logger = new Logger();
+import { logger } from "./logger";
 
 // Define types for inserting into tables
-type NewOrder = InferInsertModel<typeof orderSchema>;
-type NewItem = InferInsertModel<typeof itemSchema>;
-type NewTx = InferInsertModel<typeof transactionSchema>;
+type NewOrder = InferInsertModel<typeof budgetOrders>;
+type NewItem = InferInsertModel<typeof budgetLineItems>;
+type NewTx = InferInsertModel<typeof budgetTransactions>;
 
 const APP_DIR = path.join(__dirname, "..");
 
@@ -65,7 +41,10 @@ const isLoggedIn = async (page: Page, env: Env): Promise<boolean> => {
       (el) => el.textContent
     );
     logger.debug(`Account text: ${accountText}`);
-    return accountText?.toLowerCase().includes(`hello, ${env.name}`) ?? false;
+    return (
+      accountText?.toLowerCase().includes(`hello, ${env.name.toLowerCase()}`) ??
+      false
+    );
   } catch (error) {
     return false;
   }
@@ -78,7 +57,7 @@ const login = async (page: Page, env: Env): Promise<boolean> => {
     await wait(3000, 5000);
     await page.click("#nav-link-accountList");
     await wait(1000, 2000);
-    await page.type("#ap_email", env.email);
+    await page.type("#ap_email_login", env.email);
     await wait(800, 1500);
     await page.click("#continue");
     await wait(1000, 2000);
@@ -130,6 +109,10 @@ const getRecentOrderIds = async (page: Page): Promise<string[]> => {
   return validOrders;
 };
 
+const getOrderUrl = (orderId: string): string => {
+  return `https://www.amazon.com/gp/css/summary/print.html?orderID=${orderId}`;
+};
+
 const extractDataFromInvoice = async (
   page: Page,
   orderId: string
@@ -138,33 +121,21 @@ const extractDataFromInvoice = async (
     // Navigate to invoice page with random delay
     if (!MOCK) {
       await wait(2000, 4000);
-      const invoiceUrl = `https://www.amazon.com/gp/css/summary/print.html?orderID=${orderId}`;
+      const invoiceUrl = getOrderUrl(orderId);
 
       await page.goto(invoiceUrl);
       await wait(1000, 2000);
     }
 
-    const orderData = await page.evaluate(() => {
-      // ⚠️ NOTE: we have no access to anything in the outer context here ⚠️
-      // Also we apparently can't throw errors out or console.log
-      try {
-        return parseOrderDetailsFromPage();
-      } catch (error) {
-        return error as Error;
-      }
-    });
+    // Pass the function directly to page.evaluate
+    // Otherwise there's weird serialization issues
+    const orderData = await page.evaluate(parseOrderDetailsFromPage);
 
-    if (orderData instanceof Error) {
-      // Throwing from inside .evaluate doesn't seem to get passed to outer catch
-      throw orderData;
-    }
-
-    if (!orderData.orderDate) {
+    if (!orderData?.orderDate) {
       logger.warn(`Missing order data ${JSON.stringify(orderData)}`);
       return null;
     }
 
-    // Return combined data
     return { orderId, ...orderData };
   } catch (error) {
     console.error(
@@ -185,6 +156,7 @@ const saveOrderData = async (
     total: o.total,
     updated: new Date(),
     user: env.name,
+    detailsLink: getOrderUrl(o.orderId),
   }));
 
   const itemsToInsert = newOrders
@@ -193,6 +165,8 @@ const saveOrderData = async (
         orderId: o.orderId,
         name: i.name,
         price: i.price,
+        photo: i.photo,
+        productLink: i.productLink,
       }));
     })
     .flat();
@@ -201,22 +175,23 @@ const saveOrderData = async (
     .map((o) => {
       return o.transactions.map<NewTx>((tx) => ({
         orderId: o.orderId,
-        type: tx.type ?? "Unknown",
+        date: new Date(tx.date),
         amount: tx.amount ?? 0,
-        last4: tx.last4 ?? "Unknown",
+        isRefund: false,
+        paymentMethod: tx.paymentMethod ?? "",
       }));
     })
     .flat();
 
   await db.transaction(async (tx) => {
     if (ordersToInsert.length) {
-      await tx.insert(orderSchema).values(ordersToInsert);
+      await tx.insert(budgetOrders).values(ordersToInsert);
     }
     if (itemsToInsert.length) {
-      await tx.insert(itemSchema).values(itemsToInsert);
+      await tx.insert(budgetLineItems).values(itemsToInsert);
     }
     if (txToInsert.length) {
-      await tx.insert(transactionSchema).values(txToInsert);
+      await tx.insert(budgetTransactions).values(txToInsert);
     }
   });
 };
@@ -260,6 +235,16 @@ const handlePasswordReconfirmation = async (
 
 const goToOrdersPage = async (browser: Browser, env: Env): Promise<Page> => {
   const page = await browser.newPage();
+
+  // Forward browser console logs to Node console
+  page.on("console", (msg) => {
+    const type = msg.type();
+    const text = msg.text();
+    if (type === "log") console.log("[Browser]", text);
+    else if (type === "warn") console.warn("[Browser]", text);
+    else if (type === "error") console.error("[Browser]", text);
+  });
+
   let needsLogin = true;
 
   try {
@@ -295,6 +280,15 @@ const goToOrdersPage = async (browser: Browser, env: Env): Promise<Page> => {
 
 const goToMockPage = async (browser: Browser): Promise<Page> => {
   const page = await browser.newPage();
+
+  // Forward browser console logs to Node console
+  page.on("console", (msg) => {
+    const type = msg.type();
+    const text = msg.text();
+    if (type === "log") console.log("[Browser]", text);
+    else if (type === "warn") console.warn("[Browser]", text);
+    else if (type === "error") console.error("[Browser]", text);
+  });
 
   // Navigate to orders page
   logger.debug("Navigating to mock page...");
@@ -333,11 +327,10 @@ const main = async (): Promise<void> => {
     logger.info(`\nExtracting orders for ${env.name}...`);
 
     const existingOrders = await db
-      .select({ id: orderSchema.id })
-      .from(orderSchema)
-      .where(eq(orderSchema.user, env.name))
-      .orderBy(desc(orderSchema.created))
-      .limit(50);
+      .select({ id: budgetOrders.id })
+      .from(budgetOrders)
+      .orderBy(desc(budgetOrders.created))
+      .limit(100);
     const existingOrderIds = existingOrders.map((o) => o.id);
     logger.debug(`Found ${existingOrders.length} existing orders in DB`);
 
