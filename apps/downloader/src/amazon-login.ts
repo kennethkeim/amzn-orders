@@ -61,31 +61,34 @@ export const handlePasswordReconfirmation = async (
   page: Page,
   env: Env
 ): Promise<void> => {
+  let passwordField;
   try {
-    const passwordField = await page.waitForSelector("#ap_password", {
+    // Throws error if selector not found within timeout
+    passwordField = await page.waitForSelector("#ap_password", {
       timeout: 3000,
     });
-    if (!passwordField) return;
-
-    logger.warn("Password reconfirmation required...");
-    await wait(1000, 2000);
-    await page.type("#ap_password", env.password);
-    await wait(500, 1000);
-
-    try {
-      const checkbox = await page.$('input[name="rememberMe"]');
-      if (checkbox) {
-        await checkbox.click();
-        logger.debug("Checked 'Keep me signed in' box");
-        await wait(500, 1000);
-      }
-    } catch (error) {
-      handleError(error, `Failed to check 'Keep me signed in' checkbox`);
-    }
-
-    await page.click("#signInSubmit");
-    await page.waitForNavigation({ waitUntil: "networkidle0" });
-  } catch (error) {
-    handleError(error, "No password reconfirmation needed (probably)");
+  } catch {
+    logger.debug("No password reconfirmation needed");
   }
+
+  if (!passwordField) return;
+
+  logger.warn("Password reconfirmation required...");
+  await wait(1000, 2000);
+  await page.type("#ap_password", env.password);
+  await wait(500, 1000);
+
+  try {
+    const checkbox = await page.$('input[name="rememberMe"]');
+    if (checkbox) {
+      await checkbox.click();
+      logger.debug("Checked 'Keep me signed in' box");
+      await wait(500, 1000);
+    }
+  } catch (error) {
+    handleError(error, `Failed to check 'Keep me signed in' checkbox`);
+  }
+
+  await page.click("#signInSubmit");
+  await page.waitForNavigation({ waitUntil: "networkidle0" });
 };
