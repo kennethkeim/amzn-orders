@@ -20,6 +20,7 @@ import {
   isLoggedIn,
   login,
 } from "./amazon-login";
+import { ServiceError } from "@kennethkeim/core";
 
 const APP_DIR = path.join(__dirname, "..");
 
@@ -51,8 +52,12 @@ const extractDataFromInvoice = async (
     }
 
     return { orderId, ...orderData };
-  } catch (error) {
-    handleError(error, `Failed to extract data for order ${orderId}`);
+  } catch (cause) {
+    handleError(
+      new ServiceError(500, `Failed to extract data for order ${orderId}`, {
+        cause,
+      })
+    );
     return null;
   }
 };
@@ -192,8 +197,10 @@ const main = async (): Promise<void> => {
   console.log("");
 };
 
-main().catch(async (error: unknown) => {
-  handleError(error, "Failed to scrape Amazon order data");
+main().catch(async (cause) => {
+  handleError(
+    new ServiceError(500, "Failed to scrape Amazon order data", { cause })
+  );
 
   // Tell Node.js to exit with an error exit code, but don't call .exit() directly
   // This allows Node to finish any async work (e.g. sending error email) that was not awaited

@@ -1,3 +1,4 @@
+import { CustomError } from "@kennethkeim/core";
 import { logger } from "./logger";
 import { Mailer, emailError } from "@kennethkeim/api-utils-core";
 
@@ -13,10 +14,12 @@ export const getOrderUrl = (orderId: string): string => {
   return `https://www.amazon.com/gp/css/summary/print.html?orderID=${orderId}`;
 };
 
-export const handleError = (error: unknown, message?: string): void => {
+export const handleError = (error: CustomError): void => {
   // Log the error
-  if (message) logger.error(message);
-  logger.error(error instanceof Error ? error.message : String(error));
+  logger.error(error.message);
+  if (error.cause) {
+    logger.error(error.cause.message);
+  }
 
   // Report it
   if (mailerApiKeyExists) {

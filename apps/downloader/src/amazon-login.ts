@@ -2,6 +2,7 @@ import { logger } from "./logger";
 import { handleError, wait } from "./utils";
 import { Env } from "./types";
 import { Page } from "puppeteer";
+import { ServiceError } from "@kennethkeim/core";
 
 export const isLoggedIn = async (page: Page, env: Env): Promise<boolean> => {
   try {
@@ -18,8 +19,10 @@ export const isLoggedIn = async (page: Page, env: Env): Promise<boolean> => {
       accountText?.toLowerCase().includes(`hello, ${env.name.toLowerCase()}`) ??
       false
     );
-  } catch (error) {
-    handleError(error, "Failed to check login status");
+  } catch (cause) {
+    handleError(
+      new ServiceError(500, "Failed to check login status", { cause })
+    );
     return false;
   }
 };
@@ -51,8 +54,8 @@ export const login = async (page: Page, env: Env): Promise<boolean> => {
 
     logger.info("Login successful");
     return true;
-  } catch (error) {
-    handleError(error, "Failed to log in");
+  } catch (cause) {
+    handleError(new ServiceError(500, "Failed to log in", { cause }));
     return false;
   }
 };
@@ -85,8 +88,12 @@ export const handlePasswordReconfirmation = async (
       logger.debug("Checked 'Keep me signed in' box");
       await wait(500, 1000);
     }
-  } catch (error) {
-    handleError(error, `Failed to check 'Keep me signed in' checkbox`);
+  } catch (cause) {
+    handleError(
+      new ServiceError(500, "Failed to check 'Keep me signed in' checkbox", {
+        cause,
+      })
+    );
   }
 
   await page.click("#signInSubmit");
