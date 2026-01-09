@@ -3,7 +3,7 @@ import { config } from "dotenv";
 config({ path: path.join(__dirname, "..", ".env") });
 
 import puppeteer, { Page, Browser } from "puppeteer";
-import { OrderData, Env } from "./types";
+import { OrderData, Env, Transaction } from "./types";
 import { db } from "./db";
 import { budgetOrders } from "./db-schema";
 import { desc } from "drizzle-orm";
@@ -21,12 +21,23 @@ import {
   login,
 } from "./amazon-login";
 import { CustomError, ServiceError } from "@kennethkeim/core";
+import { parseTransactionsFromPage } from "./parse-transactions";
 
 const APP_DIR = path.join(__dirname, "..");
 
-const MOCK = process.argv.includes("--mock");
+type MockMode = "orders" | "transactions";
+let MOCK: MockMode | null = process.argv.includes("--mock-orders")
+  ? "orders"
+  : null;
+if (process.argv.includes("--mock-transactions")) {
+  MOCK = "transactions";
+}
 const HEADLESS = process.argv.includes("--headless");
 logger.info(`Mock mode: ${MOCK}`);
+
+const TX_PAGE = "https://www.amazon.com/cpe/yourpayments/transactions";
+const ORDERS_PAGE = "https://www.amazon.com/gp/your-account/order-history";
+const MOCK_PAGE = "http://localhost:4200";
 
 const extractDataFromInvoice = async (
   page: Page,
@@ -62,10 +73,36 @@ const extractDataFromInvoice = async (
   }
 };
 
-const goToOrdersListPage = async (
-  browser: Browser,
+const extractTransactions = async (
+  page: Page,
   env: Env
-): Promise<Page> => {
+): Promise<Transaction[]> => {
+  try {
+    const transactions = await page.evaluate(parseTransactionsFromPage);
+
+    transactions.forEach((txn) => {
+      console.log(`${txn.date}: $${txn.amount} for order ${txn.orderId}`);
+    });
+
+    return transactions;
+  } catch (cause) {
+    throw new ServiceError(500, "Failed to parse transactions", { cause });
+  }
+};
+
+/** Go to any Amazon page after initial login (handles password reconfirmation if needed) */
+const goToAmazonPage = async (page: Page, env: Env, url: string) => {
+  logger.debug(`Navigating to ${url}`);
+  await page.goto(url);
+  await wait(3000, 5000);
+
+  await handlePasswordReconfirmation(page, env);
+
+  // Wait for data to load after password submission
+  await wait(2000, 4000);
+};
+
+const setupAmazonPage = async (browser: Browser, env: Env): Promise<Page> => {
   const page = await browser.newPage();
 
   // Forward browser console logs to Node console
@@ -90,12 +127,6 @@ const goToOrdersListPage = async (
     }
   }
 
-  // Navigate to orders page
-  logger.debug("Navigating to orders page...");
-  await page.goto("https://www.amazon.com/gp/your-account/order-history");
-  await wait(3000, 5000);
-  await handlePasswordReconfirmation(page, env);
-
   return page;
 };
 
@@ -113,22 +144,12 @@ const goToMockPage = async (browser: Browser): Promise<Page> => {
 
   // Navigate to orders page
   logger.debug("Navigating to mock page...");
-  await page.goto("http://localhost:4200");
+  await page.goto(MOCK_PAGE);
 
   return page;
 };
 
 const main = async (): Promise<void> => {
-  if (MOCK) {
-    // Add static html to mockserver/index.html and serve it from a dev server for mock mode
-    const browser = await puppeteer.launch({ headless: false });
-    const page = await goToMockPage(browser);
-    const orderData = await extractDataFromInvoice(page, "111-7057469-3222651");
-    if (orderData) logger.info(orderData);
-    await browser.close();
-    return;
-  }
-
   const emails = (process.env.EMAIL ?? "").split(",");
   const passwords = (process.env.PASS ?? "").split(",");
   const names = (process.env.NAME ?? "").split(",");
@@ -146,6 +167,24 @@ const main = async (): Promise<void> => {
       );
     }
     logger.info(`\nExtracting orders for ${env.name}...`);
+
+    if (MOCK) {
+      // Add static html to mockserver/index.html and serve it from a dev server for mock mode
+      const browser = await puppeteer.launch({ headless: false });
+      const page = await goToMockPage(browser);
+
+      let data = null;
+      if (MOCK === "orders") {
+        data = await extractDataFromInvoice(page, "111-7057469-3222651");
+      } else if (MOCK === "transactions") {
+        data = await extractTransactions(page, env);
+      }
+
+      if (data) logger.info(data);
+
+      await browser.close();
+      continue;
+    }
 
     const existingOrders = await db
       .select({ id: budgetOrders.id })
@@ -166,7 +205,8 @@ const main = async (): Promise<void> => {
     });
 
     try {
-      const page = await goToOrdersListPage(browser, env);
+      const page = await setupAmazonPage(browser, env);
+      await goToAmazonPage(page, env, ORDERS_PAGE);
 
       // Get recent order IDs
       const recentOrderIds = await getRecentOrderIds(page);
@@ -189,6 +229,16 @@ const main = async (): Promise<void> => {
       if (newOrders.length) {
         await saveOrderData(newOrders, env);
       }
+
+      // Extract transactions from transactions page
+      logger.info(`\nExtracting transactions for ${env.name}...`);
+      await goToAmazonPage(page, env, TX_PAGE);
+      const transactions = await extractTransactions(page, env);
+      logger.info(`Found ${transactions.length} transactions in Amazon`);
+      // TODO: save transactions
+      // if (transactions.length) {
+      //   await saveTransactions(transactions);
+      // }
     } finally {
       await browser.close();
     }

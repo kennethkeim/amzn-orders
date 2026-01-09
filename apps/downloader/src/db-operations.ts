@@ -28,27 +28,12 @@ export const saveOrderData = async (
     })
     .flat();
 
-  const txToInsert = newOrders
-    .map((o) => {
-      return o.transactions.map<NewTx>((tx) => ({
-        orderId: o.orderId,
-        date: new Date(tx.date),
-        amount: tx.amount ?? 0,
-        isRefund: false,
-        paymentMethod: tx.paymentMethod ?? "",
-      }));
-    })
-    .flat();
-
   await db.transaction(async (tx) => {
     if (ordersToInsert.length) {
       await tx.insert(budgetOrders).values(ordersToInsert);
     }
     if (itemsToInsert.length) {
       await tx.insert(budgetLineItems).values(itemsToInsert);
-    }
-    if (txToInsert.length) {
-      await tx.insert(budgetTransactions).values(txToInsert);
     }
   });
 };

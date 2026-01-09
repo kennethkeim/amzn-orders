@@ -111,6 +111,5 @@ export function parseOrderDetailsFromPage(): EvaluateResult | null {
     orderDate,
     items,
     total: getDollarAmount(amountStr ?? undefined),
-    transactions: [],
   } satisfies EvaluateResult;
 }

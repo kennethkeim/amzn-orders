@@ -21,6 +21,8 @@ export interface Transaction {
   date: string;
   amount: number | null;
   paymentMethod: string | null;
+  orderId: string;
+  isRefund: boolean;
 }
 
 export interface OrderData {
@@ -28,7 +30,6 @@ export interface OrderData {
   orderDate: string | null;
   items: OrderItem[];
   total: number;
-  transactions: Transaction[];
 }
 
 export type OrderCardData = InferSelectModel<typeof budgetOrders> & {
