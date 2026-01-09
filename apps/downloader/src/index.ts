@@ -80,10 +80,6 @@ const extractTransactions = async (
   try {
     const transactions = await page.evaluate(parseTransactionsFromPage);
 
-    transactions.forEach((txn) => {
-      console.log(`${txn.date}: $${txn.amount} for order ${txn.orderId}`);
-    });
-
     return transactions;
   } catch (cause) {
     throw new ServiceError(500, "Failed to parse transactions", { cause });
