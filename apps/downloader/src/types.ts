@@ -20,7 +20,7 @@ export interface OrderItem {
 export interface Transaction {
   date: string;
   amount: number;
-  paymentMethod: string | null;
+  paymentMethod: string;
   orderId: string;
   isRefund: boolean;
 }
