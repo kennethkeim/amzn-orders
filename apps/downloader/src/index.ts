@@ -14,7 +14,7 @@ import {
 } from "./parse-order-data";
 import { logger } from "./logger";
 import { getOrderUrl, handleError, wait } from "./utils";
-import { saveOrderData } from "./db-operations";
+import { saveOrderData, saveTransactions } from "./db-operations";
 import {
   handlePasswordReconfirmation,
   isLoggedIn,
@@ -231,10 +231,9 @@ const main = async (): Promise<void> => {
       await goToAmazonPage(page, env, TX_PAGE);
       const transactions = await extractTransactions(page, env);
       logger.info(`Found ${transactions.length} transactions in Amazon`);
-      // TODO: save transactions
-      // if (transactions.length) {
-      //   await saveTransactions(transactions);
-      // }
+      if (transactions.length) {
+        await saveTransactions(transactions);
+      }
     } finally {
       await browser.close();
     }
