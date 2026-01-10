@@ -1,5 +1,11 @@
 import { relations } from "drizzle-orm";
-import { int, sqliteTableCreator, text, real } from "drizzle-orm/sqlite-core";
+import {
+  int,
+  sqliteTableCreator,
+  text,
+  real,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 
 // :::::::::::::::::::::::::::::::::: Budget ::::::::::::::::::::::::::::::::::
 
@@ -55,7 +61,15 @@ export const budgetTransactions = createBudgetTable(
       .$default(() => new Date())
       .notNull(),
   },
-  () => []
+  (table) => [
+    uniqueIndex("transaction_unique_idx").on(
+      table.orderId,
+      table.date,
+      table.amount,
+      table.paymentMethod,
+      table.isRefund
+    ),
+  ]
 );
 
 export const budgetOrdersRelations = relations(budgetOrders, ({ many }) => ({

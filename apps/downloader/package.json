@@ -6,8 +6,7 @@
     "build": "tsc",
     "start": "ts-node src/index.ts",
     "view": "ts-node src/view.ts",
-    "dbpush": "drizzle-kit push",
-    "dbstudio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio"
   },
   "author": "Kenneth Keim <kkeim77@gmail.com> (https://kennethkeim.com/)",
   "license": "ISC",
