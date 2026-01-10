@@ -19,7 +19,7 @@ export interface OrderItem {
 
 export interface Transaction {
   date: string;
-  amount: number | null;
+  amount: number;
   paymentMethod: string | null;
   orderId: string;
   isRefund: boolean;

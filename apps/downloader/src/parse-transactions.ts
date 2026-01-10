@@ -64,7 +64,7 @@ export function parseTransactionsFromPage(): Transaction[] {
 
       amount = isRefund ? amount : -amount;
 
-      if (txnDate && paymentMethod && orderId && amount !== undefined) {
+      if (txnDate && orderId && amount !== 0) {
         transactions.push({
           date: new Date(txnDate).toISOString(),
           amount,
