@@ -62,8 +62,6 @@ export function parseTransactionsFromPage(): Transaction[] {
         }
       });
 
-      amount = isRefund ? amount : -amount;
-
       if (txnDate && orderId && amount !== 0 && paymentMethod) {
         transactions.push({
           date: new Date(txnDate).toISOString(),
