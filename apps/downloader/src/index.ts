@@ -162,7 +162,9 @@ const main = async (): Promise<void> => {
         `Invalid env: missing email/password/name for index: ${i}`
       );
     }
-    logger.info(`\nExtracting orders for ${env.name}...`);
+    logger.info(
+      `\n[${new Date().toISOString()}] Extracting orders for ${env.name}...`
+    );
 
     if (MOCK) {
       // Add static html to mockserver/index.html and serve it from a dev server for mock mode
